@@ -242,7 +242,7 @@ exports.createUserWithPhone = async (userData) => {
             name: userData.name,
             isVerified: true,
             isActive: true,
-            role: 'patient'
+            role: 'user'
         });
         
         await user.save();
