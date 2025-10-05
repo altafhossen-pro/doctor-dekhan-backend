@@ -30,7 +30,7 @@ const otpSchema = new mongoose.Schema({
     expiresAt: {
         type: Date,
         required: true,
-        default: () => new Date(Date.now() + 10 * 60 * 1000) // 10 minutes from now
+        default: () => new Date(Date.now() + 2 * 60 * 1000) // 2 minutes from now
     },
     attempts: {
         type: Number,
@@ -117,8 +117,9 @@ otpSchema.statics.findLatestOTP = function(phone, type) {
 otpSchema.statics.cleanExpiredOTPs = function() {
     return this.deleteMany({
         $or: [
-            { expiresAt: { $lt: new Date() } },
-            { isUsed: true, createdAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } } // Delete used OTPs older than 24 hours
+            { expiresAt: { $lt: new Date() } }, // Delete expired OTPs
+            { isUsed: true, createdAt: { $lt: new Date(Date.now() - 2 * 60 * 60 * 1000) } }, // Delete used OTPs older than 2 hours
+            { createdAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } } // Delete any OTPs older than 24 hours
         ]
     });
 };

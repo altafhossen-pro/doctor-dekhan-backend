@@ -1,5 +1,5 @@
 {
-  "name": "doctor-backend",
+  "name": "doctordekhan-backend",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -7,10 +7,10 @@
     "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["doctor", "appointment", "healthcare", "bangladesh"],
+  "author": "DoctorDekhan Team",
   "license": "ISC",
-  "description": "",
+  "description": "DoctorDekhan Backend API - Healthcare appointment booking system",
   "dependencies": {
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",

@@ -2,8 +2,12 @@ const express = require('express');
 const router = express.Router();
 
 const doctorRoutes = require('../modules/doctor/doctor.route');
+const userRoutes = require('../modules/user/user.route');
+const logsRoutes = require('../modules/logs/logs.route');
 
 router.use('/doctor', doctorRoutes);
+router.use('/user', userRoutes);
+router.use('/logs', logsRoutes);
 
 // Health check route
 router.get('/health', (req, res) => {
