@@ -16,6 +16,7 @@ const allowedOrigins = [
     'https://www.doctordekhan.com'
 ];
 
+
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (allowedOrigins.includes(origin)) {
