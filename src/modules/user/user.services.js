@@ -1,5 +1,6 @@
 const User = require('./user.model');
 const OTP = require('../otp/otp.model');
+const Doctor = require('../doctor/doctor.model');
 const { cleanupOTPs } = require('../../utils/cleanup');
 const jwt = require('jsonwebtoken');
 
@@ -55,14 +56,23 @@ exports.verifyRefreshToken = (token) => {
     }
 };
 
-// Generate 6-digit OTP
+// Generate 6-digit OTP (Development: Simple 1-6 digits)
 exports.generateOTP = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Production mode: Generate random 6-digit OTP
+    // return Math.floor(100000 + Math.random() * 900000).toString();
+    return '123456';
 };
 
-// Send OTP to phone number
+// Send OTP to phone number (with cross-role validation)
 exports.sendOTP = async (phone) => {
     try {
+        // Check if phone number is already used by a doctor
+        const existingDoctor = await Doctor.findOne({ phone });
+        if (existingDoctor) {
+            throw new Error('This phone number is already registered. Please try again with another number.');
+        }
+
         // Clean up expired OTPs globally (lightweight cleanup)
         await cleanupOTPs();
 
@@ -85,7 +95,7 @@ exports.sendOTP = async (phone) => {
             await existingOTP.save();
 
             // TODO: Send OTP via SMS service
-            console.log(`OTP for ${phone}: ${otpCode} (Updated existing)`);
+            console.log(`🔐 DEVELOPMENT OTP for ${phone}: ${otpCode} (Updated existing)`);
 
             return {
                 success: true,
@@ -119,7 +129,81 @@ exports.sendOTP = async (phone) => {
             await otpData.save();
 
             // TODO: Send OTP via SMS service
-            console.log(`OTP for ${phone}: ${otpCode} (New)`);
+            console.log(`🔐 DEVELOPMENT OTP for ${phone}: ${otpCode} (New)`);
+
+            return {
+                success: true,
+                message: 'OTP sent successfully',
+                data: {
+                    phone,
+                    expiresIn: '2 minutes'
+                }
+            };
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Failed to send OTP');
+    }
+};
+
+// Send OTP to phone number (without cross-role validation - for internal use)
+exports.sendOTPInternal = async (phone) => {
+    try {
+        // Clean up expired OTPs globally (lightweight cleanup)
+        await cleanupOTPs();
+
+        // Check if there's already a valid (unused, not expired) OTP for this phone
+        const existingOTP = await OTP.findOne({
+            phone,
+            type: 'phone_verification',
+            isUsed: false,
+            expiresAt: { $gt: new Date() }
+        });
+
+        if (existingOTP) {
+            // Update existing OTP with new code and expiry
+            const otpCode = exports.generateOTP();
+            existingOTP.otp = otpCode;
+            existingOTP.expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes from now
+            existingOTP.attempts = 0; // Reset attempts
+            existingOTP.isBlocked = false; // Reset block status
+            existingOTP.blockedUntil = null; // Clear block time
+            await existingOTP.save();
+
+            // TODO: Send OTP via SMS service
+            console.log(`🔐 DEVELOPMENT OTP for ${phone}: ${otpCode} (Updated existing)`);
+
+            return {
+                success: true,
+                message: 'OTP sent successfully',
+                data: {
+                    phone,
+                    expiresIn: '2 minutes'
+                }
+            };
+        } else {
+            // No valid OTP exists, create new one
+            // First, clean up all expired/used OTPs for this phone number
+            await OTP.deleteMany({ 
+                phone, 
+                type: 'phone_verification',
+                $or: [
+                    { isUsed: true },
+                    { expiresAt: { $lt: new Date() } }
+                ]
+            });
+
+            const otpCode = exports.generateOTP();
+            const otpRecord = new OTP({
+                phone,
+                otp: otpCode,
+                type: 'phone_verification',
+                expiresAt: new Date(Date.now() + 2 * 60 * 1000) // 2 minutes from now
+            });
+
+            await otpRecord.save();
+
+            // TODO: Send OTP via SMS service
+            console.log(`🔐 DEVELOPMENT OTP for ${phone}: ${otpCode} (New)`);
 
             return {
                 success: true,
@@ -235,6 +319,8 @@ exports.createUserWithPhone = async (userData) => {
         if (existingUser) {
             throw new Error('User already exists with this phone number');
         }
+
+        // Phone validation is already done at OTP sending stage
 
         // Create user with minimal required fields
         const user = new User({
@@ -375,6 +461,8 @@ exports.createUser = async (userData) => {
         if (existingUser) {
             throw new Error('User already exists with this phone number');
         }
+
+        // Phone validation is already done at OTP sending stage
 
         // Create user
         const user = new User(userData);

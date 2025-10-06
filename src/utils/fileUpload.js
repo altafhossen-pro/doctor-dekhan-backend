@@ -5,6 +5,7 @@ const fs = require('fs');
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, '../../uploads');
 const imagesDir = path.join(uploadsDir, 'images');
+const documentsDir = path.join(uploadsDir, 'documents');
 
 if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
@@ -12,11 +13,19 @@ if (!fs.existsSync(uploadsDir)) {
 if (!fs.existsSync(imagesDir)) {
     fs.mkdirSync(imagesDir, { recursive: true });
 }
+if (!fs.existsSync(documentsDir)) {
+    fs.mkdirSync(documentsDir, { recursive: true });
+}
 
 // Configure storage
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, imagesDir);
+        // Store documents in documents folder, images in images folder
+        if (file.mimetype === 'application/pdf') {
+            cb(null, documentsDir);
+        } else {
+            cb(null, imagesDir);
+        }
     },
     filename: function (req, file, cb) {
         // Generate unique filename with timestamp
@@ -26,13 +35,13 @@ const storage = multer.diskStorage({
     }
 });
 
-// File filter for images
+// File filter for images and PDFs
 const fileFilter = (req, file, cb) => {
-    // Check file type
-    if (file.mimetype.startsWith('image/')) {
+    // Check file type - allow images and PDFs
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
         cb(null, true);
     } else {
-        cb(new Error('Only image files are allowed!'), false);
+        cb(new Error('Only image and PDF files are allowed!'), false);
     }
 };
 
@@ -46,10 +55,13 @@ const upload = multer({
 });
 
 // Single file upload middleware
-const uploadSingle = upload.single('image');
+const uploadSingle = upload.single('file');
 
 // Multiple files upload middleware
-const uploadMultiple = upload.array('images', 10); // Max 10 images
+const uploadMultiple = upload.array('files', 10); // Max 10 files
+
+// Document upload middleware for doctor documents
+const uploadDocument = upload.single('document');
 
 // Error handling middleware
 const handleUploadError = (err, req, res, next) => {
@@ -68,10 +80,10 @@ const handleUploadError = (err, req, res, next) => {
         }
     }
     
-    if (err.message === 'Only image files are allowed!') {
+    if (err.message === 'Only image and PDF files are allowed!') {
         return res.status(400).json({
             success: false,
-            message: 'Only image files are allowed!'
+            message: 'Only image and PDF files are allowed!'
         });
     }
     
@@ -79,14 +91,16 @@ const handleUploadError = (err, req, res, next) => {
 };
 
 // Generate file URL
-const generateFileUrl = (filename) => {
+const generateFileUrl = (filename, isDocument = false) => {
     const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-    return `${baseUrl}/uploads/images/${filename}`;
+    const folder = isDocument ? 'documents' : 'images';
+    return `${baseUrl}/uploads/${folder}/${filename}`;
 };
 
 // Delete file from filesystem
-const deleteFile = (filename) => {
-    const filePath = path.join(imagesDir, filename);
+const deleteFile = (filename, isDocument = false) => {
+    const folder = isDocument ? documentsDir : imagesDir;
+    const filePath = path.join(folder, filename);
     if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
         return true;
@@ -97,8 +111,10 @@ const deleteFile = (filename) => {
 module.exports = {
     uploadSingle,
     uploadMultiple,
+    uploadDocument,
     handleUploadError,
     generateFileUrl,
     deleteFile,
-    imagesDir
+    imagesDir,
+    documentsDir
 };
