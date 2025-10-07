@@ -336,6 +336,9 @@ exports.uploadDocument = async (req, res) => {
     try {
         const { type, url, originalName, fileSize, mimeType } = req.body;
         
+        console.log('📤 Document upload request:', { type, url, originalName, fileSize, mimeType });
+        console.log('👨‍⚕️ Doctor ID:', req.doctor._id);
+        
         if (!type || !url || !originalName || !fileSize || !mimeType) {
             return sendResponse({
                 res,
@@ -353,7 +356,9 @@ exports.uploadDocument = async (req, res) => {
             mimeType
         };
 
+        console.log('📋 Document data prepared:', documentData);
         const doctor = await doctorService.uploadDocument(req.doctor._id, documentData);
+        console.log('✅ Document uploaded, doctor documents count:', doctor.documents.length);
         
         sendResponse({
             res,
@@ -361,10 +366,12 @@ exports.uploadDocument = async (req, res) => {
             success: true,
             message: 'Document uploaded successfully',
             data: {
-                documents: doctor.documents
+                documents: doctor.documents,
+                isReadyForVerification: doctor.isReadyForVerification
             }
         });
     } catch (error) {
+        console.error('❌ Document upload error:', error);
         sendResponse({
             res,
             statusCode: 400,

@@ -148,6 +148,14 @@ const doctorSchema = new mongoose.Schema({
         enum: ['pending', 'approved', 'rejected', 'suspended'],
         default: 'pending'
     },
+    approvedAt: {
+        type: Date,
+        default: null
+    },
+    isReadyForVerification: {
+        type: Boolean,
+        default: false
+    },
     verificationNotes: {
         type: String,
         trim: true,
@@ -227,7 +235,9 @@ doctorSchema.methods.getPublicProfile = function() {
         availableTimeSlots: this.availableTimeSlots,
         rating: this.rating,
         isAvailable: this.isAvailable,
-        profilePicture: profilePicture?.url
+        profilePicture: profilePicture?.url,
+        status: this.status,
+        isReadyForVerification: this.isReadyForVerification
     };
 };
 

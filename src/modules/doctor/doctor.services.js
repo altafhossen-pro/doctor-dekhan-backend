@@ -274,6 +274,36 @@ exports.updateDoctorProfile = async (doctorId, updateData) => {
             throw new Error('Doctor not found');
         }
 
+        // Check if all required documents are uploaded
+        const requiredDocuments = ['bmdc_certificate', 'mbbs_degree', 'nid_front', 'nid_back'];
+        const uploadedDocuments = doctor.documents.map(doc => doc.type);
+        
+        // For degree certificates, check if at least one exists
+        const hasBMDC = uploadedDocuments.includes('bmdc_certificate');
+        const hasDegree = uploadedDocuments.includes('mbbs_degree');
+        const hasNIDFront = uploadedDocuments.includes('nid_front');
+        const hasNIDBack = uploadedDocuments.includes('nid_back');
+        
+        const hasAllDocuments = hasBMDC && hasDegree && hasNIDFront && hasNIDBack;
+
+        console.log('🔍 Document check:', {
+            requiredDocuments,
+            uploadedDocuments,
+            hasBMDC,
+            hasDegree,
+            hasNIDFront,
+            hasNIDBack,
+            hasAllDocuments,
+            isReadyForVerification: doctor.isReadyForVerification
+        });
+
+        // Update isReadyForVerification status
+        if (hasAllDocuments && !doctor.isReadyForVerification) {
+            doctor.isReadyForVerification = true;
+            await doctor.save();
+            console.log('✅ Doctor is ready for verification:', doctor.firstName, doctor.lastName);
+        }
+
         return doctor;
     } catch (error) {
         throw error;
@@ -373,16 +403,37 @@ exports.deactivateDoctor = async (doctorId) => {
 // Upload document for doctor
 exports.uploadDocument = async (doctorId, documentData) => {
     try {
+        console.log('🔍 Uploading document for doctor:', doctorId, documentData);
+        
         const doctor = await Doctor.findById(doctorId);
         if (!doctor) {
             throw new Error('Doctor not found');
         }
 
+        console.log('👨‍⚕️ Doctor found:', doctor.firstName, doctor.lastName);
+        console.log('📄 Current documents:', doctor.documents.length);
+
         // Check if document type already exists
         const existingDoc = doctor.documents.find(doc => doc.type === documentData.type);
         
-        if (existingDoc) {
-            // Update existing document
+        // For degree certificates, always add new (multiple allowed)
+        // For other documents, update existing or add new
+        if (documentData.type === 'mbbs_degree') {
+            console.log('➕ Adding new degree certificate (multiple allowed):', documentData.type);
+            // Always add new degree certificate
+            doctor.documents.push({
+                type: documentData.type,
+                url: documentData.url,
+                originalName: documentData.originalName,
+                fileSize: documentData.fileSize,
+                mimeType: documentData.mimeType,
+                uploadedAt: new Date(),
+                verified: false,
+                rejected: false
+            });
+        } else if (existingDoc) {
+            console.log('🔄 Updating existing document:', existingDoc.type);
+            // Update existing document (for BMDC, NID, etc.)
             existingDoc.url = documentData.url;
             existingDoc.originalName = documentData.originalName;
             existingDoc.fileSize = documentData.fileSize;
@@ -391,6 +442,7 @@ exports.uploadDocument = async (doctorId, documentData) => {
             existingDoc.verified = false;
             existingDoc.rejected = false;
         } else {
+            console.log('➕ Adding new document:', documentData.type);
             // Add new document
             doctor.documents.push({
                 type: documentData.type,
@@ -404,9 +456,32 @@ exports.uploadDocument = async (doctorId, documentData) => {
             });
         }
 
+        console.log('💾 Saving doctor with documents:', doctor.documents.length);
         await doctor.save();
+        console.log('✅ Doctor saved successfully');
+        
+        // Check if all required documents are now uploaded
+        const requiredDocuments = ['bmdc_certificate', 'mbbs_degree', 'nid_front', 'nid_back'];
+        const uploadedDocuments = doctor.documents.map(doc => doc.type);
+        
+        // For degree certificates, check if at least one exists
+        const hasBMDC = uploadedDocuments.includes('bmdc_certificate');
+        const hasDegree = uploadedDocuments.includes('mbbs_degree');
+        const hasNIDFront = uploadedDocuments.includes('nid_front');
+        const hasNIDBack = uploadedDocuments.includes('nid_back');
+        
+        const hasAllDocuments = hasBMDC && hasDegree && hasNIDFront && hasNIDBack;
+
+        // Update isReadyForVerification status
+        if (hasAllDocuments && !doctor.isReadyForVerification) {
+            doctor.isReadyForVerification = true;
+            await doctor.save();
+            console.log('✅ Doctor is now ready for verification:', doctor.firstName, doctor.lastName);
+        }
+        
         return doctor;
     } catch (error) {
+        console.error('❌ Error uploading document:', error);
         throw error;
     }
 };
@@ -468,6 +543,55 @@ exports.updateDoctorProfile = async (doctorId, updateData) => {
             throw new Error('Doctor not found');
         }
 
+        return doctor;
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Approve doctor (admin only)
+exports.approveDoctor = async (doctorId) => {
+    try {
+        const doctor = await Doctor.findByIdAndUpdate(
+            doctorId,
+            {
+                status: 'approved',
+                approvedAt: new Date(),
+                verifiedAt: new Date()
+            },
+            { new: true, runValidators: true }
+        );
+
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        console.log('✅ Doctor approved:', doctor.firstName, doctor.lastName, 'at', doctor.approvedAt);
+        return doctor;
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Reject doctor (admin only)
+exports.rejectDoctor = async (doctorId, adminId, rejectionReason) => {
+    try {
+        const doctor = await Doctor.findByIdAndUpdate(
+            doctorId,
+            {
+                status: 'rejected',
+                verifiedBy: adminId,
+                verifiedAt: new Date(),
+                verificationNotes: rejectionReason
+            },
+            { new: true, runValidators: true }
+        );
+
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        console.log('❌ Doctor rejected:', doctor.firstName, doctor.lastName, 'Reason:', rejectionReason);
         return doctor;
     } catch (error) {
         throw error;
