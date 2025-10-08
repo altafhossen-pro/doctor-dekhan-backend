@@ -1,46 +1,52 @@
 name: Deploy Doctor Dekhan Backend
 
 on:
-  push:
-    branches:
-      - main
+    push:
+        branches:
+            - main
 
 jobs:
-  deploy:
-    name: Deploy to VPS
-    runs-on: ubuntu-latest
+    deploy:
+        name: Deploy to VPS
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v3
 
-      - name: Setup SSH Key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+            - name: Setup SSH Key
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+                  chmod 600 ~/.ssh/id_rsa
+                  ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to VPS
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
-        run: |
-          echo "🚀 Connecting to VPS and deploying backend..."
-          ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
-            set -e
-            cd $PROJECT_PATH
-            echo '📦 Pulling latest code...'
-            git fetch --all
-            git reset --hard origin/main
+            - name: Deploy to VPS
+              env:
+                  SSH_USER: ${{ secrets.SSH_USER }}
+                  SSH_HOST: ${{ secrets.SSH_HOST }}
+                  PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
+              run: |
+                  echo "🚀 Connecting to VPS and deploying backend..."
+                  ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
+                    set -e
+                    cd $PROJECT_PATH
+                    echo '📦 Pulling latest code...'
+                    git fetch --all
+                    git reset --hard origin/main
 
-            echo '📦 Installing dependencies...'
-            npm install
+                    # Create/update .env from secret
+                    echo '📝 Creating/updating .env from secret...'
+                    if [ ! -z '${{ secrets.ENV_FILE }}' ]; then
+                        echo '${{ secrets.ENV_FILE }}' > .env
+                    fi
 
-            echo '🚀 Starting app with PM2...'
-            pm2 restart doctor-dekhan-backend || pm2 start npm --name 'doctor-dekhan-backend' -- run start
-            pm2 save
+                    echo '📦 Installing dependencies...'
+                    npm install
 
-            echo '✅ Deployment completed successfully.'
-          "
+                    echo '🚀 Starting app with PM2...'
+                    pm2 restart doctor-dekhan-backend || pm2 start npm --name 'doctor-dekhan-backend' -- run start
+                    pm2 save
+
+                    echo '✅ Deployment completed successfully.'
+                  "
