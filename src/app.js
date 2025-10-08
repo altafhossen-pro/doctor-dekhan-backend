@@ -13,6 +13,8 @@ const app = express();
 const allowedOrigins = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    'http://103.174.51.135:3000',
+    'https://doctordekhan.com',
     'https://www.doctordekhan.com'
 ];
 
@@ -39,6 +41,8 @@ app.use(cors({
     origin: [
         'http://localhost:3000',
         'http://127.0.0.1:3000',
+        'http://103.174.51.135:3000',
+        'https://doctordekhan.com',
         'https://www.doctordekhan.com',
     ],
     credentials: true,
