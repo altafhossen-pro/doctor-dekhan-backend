@@ -36,6 +36,7 @@ app.use((req, res, next) => {
 // Connect to MongoDB
 connectDB();
 
+
 // Middlewares
 app.use(cors({
     origin: [
