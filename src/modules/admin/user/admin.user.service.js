@@ -50,6 +50,7 @@ exports.getAllUsersForAdmin = async ({ page, limit, search, status, sortBy, sort
         const hasNextPage = page < totalPages;
         const hasPrevPage = page > 1;
         
+        
         return {
             users,
             pagination: {
