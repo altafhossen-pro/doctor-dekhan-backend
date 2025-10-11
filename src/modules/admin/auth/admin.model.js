@@ -128,7 +128,7 @@ adminSchema.methods.generateAccessToken = function() {
       type: 'access'
     },
     process.env.JWT_SECRET,
-    { expiresIn: '15m' }
+    { expiresIn: '1d' }
   );
 };
 
@@ -140,7 +140,7 @@ adminSchema.methods.generateRefreshToken = function() {
       type: 'refresh'
     },
     process.env.JWT_REFRESH_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '30d' }
   );
 };
 
