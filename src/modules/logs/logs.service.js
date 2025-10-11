@@ -7,19 +7,19 @@ exports.createLog = async (logData) => {
         const logLevel = logData.level || 'info';
         const logMessage = `[${logLevel.toUpperCase()}] ${logData.message}`;
         
-        switch (logLevel) {
-            case 'error':
-                console.error('🚨', logMessage, logData);
-                break;
-            case 'warn':
-                console.warn('⚠️', logMessage, logData);
-                break;
-            case 'info':
-                console.info('ℹ️', logMessage, logData);
-                break;
-            default:
-                console.log('📝', logMessage, logData);
-        }
+        // switch (logLevel) {
+        //     case 'error':
+        //         console.error('🚨', logMessage, logData);
+        //         break;
+        //     case 'warn':
+        //         console.warn('⚠️', logMessage, logData);
+        //         break;
+        //     case 'info':
+        //         console.info('ℹ️', logMessage, logData);
+        //         break;
+        //     default:
+        //         console.log('📝', logMessage, logData);
+        // }
 
         // Try to save to database with fallback
         try {

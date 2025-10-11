@@ -9,7 +9,7 @@ exports.generateAccessToken = (doctorId) => {
     return jwt.sign(
         { doctorId, type: 'access' },
         process.env.JWT_SECRET,
-        { expiresIn: '30m' }
+        { expiresIn: '30d' }
     );
 };
 
@@ -96,17 +96,17 @@ exports.verifyOTP = async (phone, otp) => {
     try {
         // First verify the OTP
         const otpResult = await verifyOTP(phone, otp);
-        
+
         // After OTP verification, check if doctor already exists
         const existingDoctor = await Doctor.findOne({ phone });
-        
+
         if (existingDoctor) {
             // If doctor exists, generate tokens and return login data
             const tokens = exports.generateTokens(existingDoctor._id);
-            
+
             // Update last login
             await Doctor.findByIdAndUpdate(existingDoctor._id, { lastLoginAt: new Date() });
-            
+
             return {
                 success: true,
                 message: 'OTP verified successfully. Login successful.',
@@ -120,7 +120,7 @@ exports.verifyOTP = async (phone, otp) => {
                 }
             };
         }
-        
+
         // If doctor doesn't exist, return success for registration
         return {
             success: true,
@@ -264,51 +264,21 @@ exports.getDoctorProfile = async (doctorId) => {
 // Update doctor profile
 exports.updateDoctorProfile = async (doctorId, updateData) => {
     try {
-        const doctor = await Doctor.findByIdAndUpdate(
+        const updatedDoctor = await Doctor.findByIdAndUpdate(
             doctorId,
-            { ...updateData, updatedAt: new Date() },
+            updateData,
             { new: true, runValidators: true }
         );
-
-        if (!doctor) {
+        if (!updatedDoctor) {
             throw new Error('Doctor not found');
         }
-
-        // Check if all required documents are uploaded
-        const requiredDocuments = ['bmdc_certificate', 'mbbs_degree', 'nid_front', 'nid_back'];
-        const uploadedDocuments = doctor.documents.map(doc => doc.type);
-        
-        // For degree certificates, check if at least one exists
-        const hasBMDC = uploadedDocuments.includes('bmdc_certificate');
-        const hasDegree = uploadedDocuments.includes('mbbs_degree');
-        const hasNIDFront = uploadedDocuments.includes('nid_front');
-        const hasNIDBack = uploadedDocuments.includes('nid_back');
-        
-        const hasAllDocuments = hasBMDC && hasDegree && hasNIDFront && hasNIDBack;
-
-        console.log('🔍 Document check:', {
-            requiredDocuments,
-            uploadedDocuments,
-            hasBMDC,
-            hasDegree,
-            hasNIDFront,
-            hasNIDBack,
-            hasAllDocuments,
-            isReadyForVerification: doctor.isReadyForVerification
-        });
-
-        // Update isReadyForVerification status
-        if (hasAllDocuments && !doctor.isReadyForVerification) {
-            doctor.isReadyForVerification = true;
-            await doctor.save();
-            console.log('✅ Doctor is ready for verification:', doctor.firstName, doctor.lastName);
-        }
-
-        return doctor;
+        return updatedDoctor;
     } catch (error) {
+        console.log("❌ Error in updateDoctorProfile:", error.message);
         throw error;
     }
 };
+
 
 // Get all doctors (for admin)
 exports.getAllDoctors = async (filters = {}) => {
@@ -404,7 +374,7 @@ exports.deactivateDoctor = async (doctorId) => {
 exports.uploadDocument = async (doctorId, documentData) => {
     try {
         console.log('🔍 Uploading document for doctor:', doctorId, documentData);
-        
+
         const doctor = await Doctor.findById(doctorId);
         if (!doctor) {
             throw new Error('Doctor not found');
@@ -415,7 +385,7 @@ exports.uploadDocument = async (doctorId, documentData) => {
 
         // Check if document type already exists
         const existingDoc = doctor.documents.find(doc => doc.type === documentData.type);
-        
+
         // For degree certificates, always add new (multiple allowed)
         // For other documents, update existing or add new
         if (documentData.type === 'mbbs_degree') {
@@ -459,26 +429,52 @@ exports.uploadDocument = async (doctorId, documentData) => {
         console.log('💾 Saving doctor with documents:', doctor.documents.length);
         await doctor.save();
         console.log('✅ Doctor saved successfully');
-        
+
         // Check if all required documents are now uploaded
         const requiredDocuments = ['bmdc_certificate', 'mbbs_degree', 'nid_front', 'nid_back'];
         const uploadedDocuments = doctor.documents.map(doc => doc.type);
-        
+
         // For degree certificates, check if at least one exists
         const hasBMDC = uploadedDocuments.includes('bmdc_certificate');
         const hasDegree = uploadedDocuments.includes('mbbs_degree');
         const hasNIDFront = uploadedDocuments.includes('nid_front');
         const hasNIDBack = uploadedDocuments.includes('nid_back');
-        
+
         const hasAllDocuments = hasBMDC && hasDegree && hasNIDFront && hasNIDBack;
 
-        // Update isReadyForVerification status
-        if (hasAllDocuments && !doctor.isReadyForVerification) {
+        // Check if all required profile fields are filled
+        const hasFirstName = doctor.firstName && doctor.firstName.trim() !== '';
+        const hasLastName = doctor.lastName && doctor.lastName.trim() !== '';
+        const hasBMDCNumber = doctor.bmdcNumber && doctor.bmdcNumber.trim() !== '';
+        const hasExperience = doctor.experience !== null && doctor.experience !== undefined && doctor.experience !== '';
+        const hasQualification = doctor.qualification && doctor.qualification.trim() !== '';
+
+        const hasAllProfileFields = hasFirstName && hasLastName && hasBMDCNumber && hasExperience && hasQualification;
+
+        console.log('🔍 Document and Profile check (upload):', {
+            requiredDocuments,
+            uploadedDocuments,
+            hasBMDC,
+            hasDegree,
+            hasNIDFront,
+            hasNIDBack,
+            hasAllDocuments,
+            hasFirstName,
+            hasLastName,
+            hasBMDCNumber,
+            hasExperience,
+            hasQualification,
+            hasAllProfileFields,
+            isReadyForVerification: doctor.isReadyForVerification
+        });
+
+        // Update isReadyForVerification status - both documents AND profile fields must be complete
+        if (hasAllDocuments && hasAllProfileFields && !doctor.isReadyForVerification) {
             doctor.isReadyForVerification = true;
             await doctor.save();
             console.log('✅ Doctor is now ready for verification:', doctor.firstName, doctor.lastName);
         }
-        
+
         return doctor;
     } catch (error) {
         console.error('❌ Error uploading document:', error);
@@ -593,6 +589,208 @@ exports.rejectDoctor = async (doctorId, adminId, rejectionReason) => {
 
         console.log('❌ Doctor rejected:', doctor.firstName, doctor.lastName, 'Reason:', rejectionReason);
         return doctor;
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Submit doctor profile for admin approval
+exports.submitForApproval = async (doctorId) => {
+    try {
+        const doctor = await Doctor.findByIdAndUpdate(
+            doctorId,
+            {
+                isCurrentlyHaveEditProfile: false,
+                isVerificationStatusSended: true,
+                updatedAt: new Date()
+            },
+            { new: true, runValidators: true }
+        );
+
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        return doctor;
+    } catch (error) {
+        throw error;
+    }
+};
+
+
+exports.checkOrSetIsReadyForVerification = async (doctorId) => {
+    try {
+        const doctor = await Doctor.findById(doctorId);
+
+        const requiredDocuments = ['bmdc_certificate', 'mbbs_degree', 'nid_front', 'nid_back'];
+        const uploadedDocuments = doctor.documents.map(doc => doc.type);
+
+        const hasAllDocuments = requiredDocuments.every(doc => uploadedDocuments.includes(doc));
+
+        const hasFirstName = doctor.firstName && doctor.firstName.trim() !== '';
+        const hasLastName = doctor.lastName && doctor.lastName.trim() !== '';
+        const hasBMDCNumber = doctor.bmdcNumber && doctor.bmdcNumber.trim() !== '';
+        const hasExperience = doctor.experience !== null && doctor.experience !== undefined && doctor.experience !== '';
+        const hasQualification = doctor.qualification && doctor.qualification.trim() !== '';
+
+        const hasAllProfileFields = hasFirstName && hasLastName && hasBMDCNumber && hasExperience && hasQualification;
+
+        const isReadyForVerification = hasAllDocuments && hasAllProfileFields && !doctor.isReadyForVerification;
+
+        return isReadyForVerification ? true : false;
+    } catch (error) {
+        throw error;
+    }
+};
+
+exports.getDoctorById = async (doctorId) => {
+    try {
+        const doctor = await Doctor.findById(doctorId);
+        return doctor;
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Get all doctors for admin with pagination and filters
+exports.getAllDoctorsForAdmin = async (options) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            search = '',
+            status = 'all',
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
+        } = options;
+
+        // Build query
+        let query = {};
+
+        // Status filter
+        if (status !== 'all') {
+            query.status = status;
+        }
+
+        // Search filter
+        if (search) {
+            query.$or = [
+                { firstName: { $regex: search, $options: 'i' } },
+                { lastName: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { specialization: { $regex: search, $options: 'i' } },
+                { bmdcNumber: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Calculate pagination
+        const skip = (page - 1) * limit;
+
+        // Build sort object
+        const sort = {};
+        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+        // Execute query
+        const [doctors, totalCount] = await Promise.all([
+            Doctor.find(query)
+                .select('-password -refreshToken')
+                .sort(sort)
+                .skip(skip)
+                .limit(parseInt(limit))
+                .lean(),
+            Doctor.countDocuments(query)
+        ]);
+
+        // Calculate pagination info
+        const totalPages = Math.ceil(totalCount / limit);
+        const hasNextPage = page < totalPages;
+        const hasPrevPage = page > 1;
+
+        return {
+            doctors,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages,
+                totalCount,
+                limit: parseInt(limit),
+                hasNextPage,
+                hasPrevPage
+            }
+        };
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Update doctor status
+exports.updateDoctorStatus = async (doctorId, updateData) => {
+    try {
+        const { status, rejectionReason, updatedBy } = updateData;
+        
+        const updateFields = {
+            status,
+            updatedBy
+        };
+
+        if (rejectionReason) {
+            updateFields.rejectionReason = rejectionReason;
+        }
+
+        const doctor = await Doctor.findByIdAndUpdate(
+            doctorId,
+            updateFields,
+            { new: true, runValidators: true }
+        ).select('-password -refreshToken');
+
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        return doctor;
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Delete doctor
+exports.deleteDoctor = async (doctorId) => {
+    try {
+        const doctor = await Doctor.findByIdAndDelete(doctorId).select('-password -refreshToken');
+        
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        return doctor;
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Get doctor statistics
+exports.getDoctorStats = async () => {
+    try {
+        const [
+            totalDoctors,
+            approvedDoctors,
+            pendingDoctors,
+            rejectedDoctors,
+            activeDoctors
+        ] = await Promise.all([
+            Doctor.countDocuments(),
+            Doctor.countDocuments({ status: 'approved' }),
+            Doctor.countDocuments({ status: 'pending' }),
+            Doctor.countDocuments({ status: 'rejected' }),
+            Doctor.countDocuments({ isAvailable: true })
+        ]);
+
+        return {
+            total: totalDoctors,
+            approved: approvedDoctors,
+            pending: pendingDoctors,
+            rejected: rejectedDoctors,
+            active: activeDoctors
+        };
     } catch (error) {
         throw error;
     }

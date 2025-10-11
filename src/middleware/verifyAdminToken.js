@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../modules/user/user.model');
+const Admin = require('../modules/admin/auth/admin.model');
 const sendResponse = require('../utils/sendResponse');
 
 exports.verifyAdminToken = async (req, res, next) => {
@@ -17,19 +17,29 @@ exports.verifyAdminToken = async (req, res, next) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
         
-        // Find full user data from database
-        const user = await User.findById(decoded.userId).select('-password');
-        
-        if (!user) {
+        // Check if token is for admin
+        if (decoded.type !== 'access') {
             return sendResponse({
                 res,
                 statusCode: 401,
                 success: false,
-                message: 'User not found.'
+                message: 'Invalid token type.'
+            });
+        }
+        
+        // Find full admin data from database
+        const admin = await Admin.findById(decoded.adminId).select('-password');
+        
+        if (!admin) {
+            return sendResponse({
+                res,
+                statusCode: 401,
+                success: false,
+                message: 'Admin not found.'
             });
         }
 
-        if (!user.isActive) {
+        if (!admin.isActive) {
             return sendResponse({
                 res,
                 statusCode: 401,
@@ -38,18 +48,8 @@ exports.verifyAdminToken = async (req, res, next) => {
             });
         }
 
-        // Check if user is admin
-        if (user.role !== 'admin') {
-            return sendResponse({
-                res,
-                statusCode: 403,
-                success: false,
-                message: 'Access denied. Admin privileges required.'
-            });
-        }
-
-        // Put full user object in req.user
-        req.user = user;
+        // Put full admin object in req.admin
+        req.admin = admin;
         next();
     } catch (error) {
         return sendResponse({

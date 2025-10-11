@@ -270,12 +270,21 @@ exports.getProfile = async (req, res) => {
     try {
         const doctor = req.doctor;
         
+        // Check if doctor is ready for verification
+        const isReadyForVerification = await doctorService.checkOrSetIsReadyForVerification(req.doctor._id);
+        
+        // Add isReadyForVerification property to doctor data
+        const doctorData = {
+            ...doctor.toObject(),
+            isReadyForVerification
+        };
+        
         sendResponse({
             res,
             statusCode: 200,
             success: true,
             message: 'Profile retrieved successfully',
-            data: doctor
+            data: doctorData
         });
     } catch (error) {
         sendResponse({
@@ -292,14 +301,17 @@ exports.updateProfile = async (req, res) => {
     try {
         const updateData = req.body;
         const doctor = await doctorService.updateDoctorProfile(req.doctor._id, updateData);
-        
+
+        const isReadyForVerification = await doctorService.checkOrSetIsReadyForVerification(req.doctor._id);
+        const updatedDoctor = await doctorService.getDoctorById(req.doctor._id);
         sendResponse({
             res,
             statusCode: 200,
             success: true,
             message: 'Profile updated successfully',
             data: {
-                doctor: doctor.getPublicProfile()
+                doctor: updatedDoctor.getPublicProfile(),
+                isReadyForVerification
             }
         });
     } catch (error) {
@@ -360,6 +372,7 @@ exports.uploadDocument = async (req, res) => {
         const doctor = await doctorService.uploadDocument(req.doctor._id, documentData);
         console.log('✅ Document uploaded, doctor documents count:', doctor.documents.length);
         
+        const isReadyForVerification = await doctorService.checkOrSetIsReadyForVerification(req.doctor._id);
         sendResponse({
             res,
             statusCode: 200,
@@ -367,7 +380,7 @@ exports.uploadDocument = async (req, res) => {
             message: 'Document uploaded successfully',
             data: {
                 documents: doctor.documents,
-                isReadyForVerification: doctor.isReadyForVerification
+                isReadyForVerification: isReadyForVerification
             }
         });
     } catch (error) {
@@ -442,28 +455,43 @@ exports.uploadFile = async (req, res) => {
     }
 };
 
-// Update doctor profile
-exports.updateProfile = async (req, res) => {
+// Submit profile for admin approval
+exports.submitForApproval = async (req, res) => {
     try {
-        const { firstName, lastName, experience, bmdcNumber, qualification } = req.body;
+        const doctor = req.doctor;
         
-        const updateData = {
-            firstName,
-            lastName,
-            experience: parseInt(experience),
-            bmdcNumber,
-            qualification
-        };
+        const isReadyForVerification = await doctorService.checkOrSetIsReadyForVerification(req.doctor._id);
 
-        const doctor = await doctorService.updateDoctorProfile(req.doctor._id, updateData);
+        if (isReadyForVerification === false) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Please complete your profile and upload all required documents first'
+            });
+        }
+
+        // Check if already submitted
+        if (doctor.isVerificationStatusSended === true) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Profile has already been submitted for approval'
+            });
+        }
+
+        // Update doctor status
+        const updatedDoctor = await doctorService.submitForApproval(req.doctor._id);
+        
 
         sendResponse({
             res,
             statusCode: 200,
             success: true,
-            message: 'Profile updated successfully',
+            message: 'Profile submitted for admin approval successfully',
             data: {
-                doctor: doctor.getPublicProfile()
+                doctor: updatedDoctor.getPublicProfile()
             }
         });
     } catch (error) {

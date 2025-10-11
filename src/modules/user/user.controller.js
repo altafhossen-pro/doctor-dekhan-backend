@@ -44,6 +44,14 @@ exports.sendOTP = async (req, res) => {
             });
 
         } catch (error) {
+            if (error.message.includes('This phone number is already registered. Please try again with another number.')) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: error.message
+                });
+            }
             sendResponse({
                 res,
                 statusCode: 500,

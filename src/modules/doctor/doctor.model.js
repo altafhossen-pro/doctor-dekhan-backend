@@ -55,7 +55,7 @@ const doctorSchema = new mongoose.Schema({
         unique: true,
         sparse: true, // Allows multiple null values for unique constraint
         trim: true,
-        minlength: 6 
+        minlength: 4 
     },
     
     // Practice Information
@@ -152,7 +152,11 @@ const doctorSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
-    isReadyForVerification: {
+    isCurrentlyHaveEditProfile: {
+        type: Boolean,
+        default: true
+    },
+    isVerificationStatusSended: {
         type: Boolean,
         default: false
     },
@@ -229,6 +233,7 @@ doctorSchema.methods.getPublicProfile = function() {
         specialization: this.specialization,
         experience: this.experience,
         qualification: this.qualification,
+        bmdcNumber: this.bmdcNumber,
         currentHospital: this.currentHospital,
         consultationFee: this.consultationFee,
         availableDays: this.availableDays,
@@ -237,7 +242,8 @@ doctorSchema.methods.getPublicProfile = function() {
         isAvailable: this.isAvailable,
         profilePicture: profilePicture?.url,
         status: this.status,
-        isReadyForVerification: this.isReadyForVerification
+        isCurrentlyHaveEditProfile: this.isCurrentlyHaveEditProfile,
+        isVerificationStatusSended: this.isVerificationStatusSended
     };
 };
 

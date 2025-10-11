@@ -14,7 +14,8 @@ router.post('/refresh-token', doctorController.refreshToken);
 
 // Protected routes (authentication required)
 router.get('/profile', verifyDoctorToken, doctorController.getProfile);
-router.put('/profile', verifyDoctorToken, doctorController.updateProfile);
+router.patch('/profile', verifyDoctorToken, doctorController.updateProfile);
+router.post('/submit-for-approval', verifyDoctorToken, doctorController.submitForApproval);
 router.post('/logout', verifyDoctorToken, doctorController.logout);
 
 // Document routes
