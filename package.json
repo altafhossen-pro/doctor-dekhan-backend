@@ -7,7 +7,12 @@
     "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["doctor", "appointment", "healthcare", "bangladesh"],
+  "keywords": [
+    "doctor",
+    "appointment",
+    "healthcare",
+    "bangladesh"
+  ],
   "author": "DoctorDekhan Team",
   "license": "ISC",
   "description": "DoctorDekhan Backend API - Healthcare appointment booking system",
@@ -24,6 +29,8 @@
     "multer": "^2.0.2",
     "nodemailer": "^7.0.6",
     "slugify": "^1.6.6",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "zod": "^4.1.11"
   }
 }

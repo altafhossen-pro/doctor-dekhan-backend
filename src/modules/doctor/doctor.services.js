@@ -3,6 +3,7 @@ const OTP = require('../otp/otp.model');
 const User = require('../user/user.model');
 const jwt = require('jsonwebtoken');
 const { generateOTP, sendOTP, sendOTPInternal, verifyOTP } = require('../user/user.services');
+const { generateDoctorIdentifiers } = require('../../utils/doctorUtils');
 
 // Generate access token for doctor
 exports.generateAccessToken = (doctorId) => {
@@ -182,7 +183,11 @@ exports.createDoctor = async (doctorData) => {
             throw new Error(`Doctor with this ${conflictField} already exists`);
         }
 
-        // Phone validation is already done at OTP sending stage
+        // Generate unique identifiers
+        const { slug, doctorUID } = await generateDoctorIdentifiers(
+            doctorData.firstName, 
+            doctorData.lastName
+        );
 
         // Create new doctor with only provided fields
         const doctor = new Doctor({
@@ -190,6 +195,8 @@ exports.createDoctor = async (doctorData) => {
             lastName: doctorData.lastName,
             email: doctorData.email,
             phone: doctorData.phone,
+            slug: slug,
+            doctorUID: doctorUID,
             specialization: doctorData.specialization,
             currentHospital: doctorData.currentHospital,
             consultationFee: doctorData.consultationFee,
@@ -213,6 +220,24 @@ exports.createDoctor = async (doctorData) => {
 exports.findDoctorByPhone = async (phone) => {
     try {
         return await Doctor.findOne({ phone, isActive: true });
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Find doctor by slug
+exports.findDoctorBySlug = async (slug) => {
+    try {
+        return await Doctor.findOne({ slug, isActive: true });
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Find doctor by doctorUID
+exports.findDoctorByUID = async (doctorUID) => {
+    try {
+        return await Doctor.findOne({ doctorUID, isActive: true });
     } catch (error) {
         throw error;
     }

@@ -30,6 +30,23 @@ const doctorSchema = new mongoose.Schema({
         match: [/^01[3-9]\d{8}$/, 'Please enter a valid Bangladeshi phone number']
     },
     
+    // Unique Identifiers
+    slug: {
+        type: String,
+        required: [true, 'Slug is required'],
+        unique: true,
+        trim: true,
+        lowercase: true,
+        maxlength: [100, 'Slug cannot exceed 100 characters']
+    },
+    doctorUID: {
+        type: String,
+        required: [true, 'Doctor UID is required'],
+        unique: true,
+        trim: true,
+        match: [/^11\d{2,4}$/, 'Doctor UID must be 4-6 digits starting with 11']
+    },
+    
     // Professional Information
     specialization: {
         type: String,

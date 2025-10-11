@@ -297,6 +297,11 @@ exports.getProfile = async (req, res) => {
     try {
         const doctor = req.doctor;
         
+        // Update doctor heartbeat when profile is accessed
+        if (global.updateDoctorHeartbeat) {
+            global.updateDoctorHeartbeat(doctor._id.toString());
+        }
+        
         // Check if doctor is ready for verification
         const isReadyForVerification = await doctorService.checkOrSetIsReadyForVerification(req.doctor._id);
         
@@ -513,6 +518,99 @@ exports.submitForApproval = async (req, res) => {
             message: 'Profile submitted for admin approval successfully',
             data: {
                 doctor: updatedDoctor.getPublicProfile()
+            }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Get online doctors status (for admin)
+exports.getOnlineDoctors = async (req, res) => {
+    try {
+        const onlineDoctors = global.getActiveDoctors ? global.getActiveDoctors() : [];
+        
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Online doctors retrieved successfully',
+            data: {
+                onlineDoctors,
+                count: onlineDoctors.length
+            }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Get doctor by slug (public)
+exports.getDoctorBySlug = async (req, res) => {
+    try {
+        const { slug } = req.params;
+        const doctor = await doctorService.findDoctorBySlug(slug);
+        
+        if (!doctor) {
+            return sendResponse({
+                res,
+                statusCode: 404,
+                success: false,
+                message: 'Doctor not found'
+            });
+        }
+        
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Doctor retrieved successfully',
+            data: {
+                doctor: doctor.getPublicProfile()
+            }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Get doctor by UID (public)
+exports.getDoctorByUID = async (req, res) => {
+    try {
+        const { doctorUID } = req.params;
+        const doctor = await doctorService.findDoctorByUID(doctorUID);
+        
+        if (!doctor) {
+            return sendResponse({
+                res,
+                statusCode: 404,
+                success: false,
+                message: 'Doctor not found'
+            });
+        }
+        
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Doctor retrieved successfully',
+            data: {
+                doctor: doctor.getPublicProfile()
             }
         });
     } catch (error) {
