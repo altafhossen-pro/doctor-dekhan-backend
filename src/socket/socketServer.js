@@ -6,10 +6,12 @@ const doctorHeartbeats = new Map(); // doctorId -> timeoutId
 const HEARTBEAT_TIMEOUT = 60000; // 60 seconds timeout (longer than 30s heartbeat interval)
 
 // Helper functions for heartbeat management
-const setDoctorOnline = (doctorId, socketId) => {
+const setDoctorOnline = (doctorId, socketId = null) => {
+    const wasAlreadyOnline = activeDoctors.has(doctorId);
     const now = Date.now();
+    
     activeDoctors.set(doctorId, {
-        socketId,
+        socketId: socketId || 'profile-access',
         lastHeartbeat: now,
         isOnline: true
     });
@@ -25,6 +27,11 @@ const setDoctorOnline = (doctorId, socketId) => {
     }, HEARTBEAT_TIMEOUT);
     
     doctorHeartbeats.set(doctorId, timeoutId);
+    
+    // Notify admin panel only if this is a new online doctor
+    if (global.io && !wasAlreadyOnline) {
+        global.io.to('admin-room').emit('doctor-online', { doctorId });
+    }
 };
 
 const setDoctorOffline = (doctorId) => {
@@ -91,8 +98,24 @@ const setupSocketServer = (server) => {
             const { doctorId } = data;
             if (doctorId) {
                 if (activeDoctors.has(doctorId)) {
-                    // Update existing doctor heartbeat
-                    updateDoctorHeartbeat(doctorId);
+                    // Update existing doctor heartbeat and socket ID
+                    const doctorData = activeDoctors.get(doctorId);
+                    doctorData.socketId = socket.id;
+                    doctorData.lastHeartbeat = Date.now();
+                    doctorData.isOnline = true;
+                    activeDoctors.set(doctorId, doctorData);
+                    
+                    // Reset timeout
+                    if (doctorHeartbeats.has(doctorId)) {
+                        clearTimeout(doctorHeartbeats.get(doctorId));
+                    }
+                    const timeoutId = setTimeout(() => {
+                        setDoctorOffline(doctorId);
+                    }, HEARTBEAT_TIMEOUT);
+                    doctorHeartbeats.set(doctorId, timeoutId);
+                    
+                    // Join doctor room
+                    socket.join(`doctor-${doctorId}`);
                 } else {
                     // New doctor coming online
                     setDoctorOnline(doctorId, socket.id);
@@ -111,6 +134,11 @@ const setupSocketServer = (server) => {
             // Send current active doctors list to admin
             const onlineDoctors = Array.from(activeDoctors.keys());
             socket.emit('active-doctors-list', { doctors: onlineDoctors });
+            
+            // Also send individual doctor-online events for each active doctor
+            onlineDoctors.forEach(doctorId => {
+                socket.emit('doctor-online', { doctorId });
+            });
         });
 
         // Handle disconnection

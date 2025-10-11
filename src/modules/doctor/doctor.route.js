@@ -21,12 +21,13 @@ router.post('/logout', verifyDoctorToken, doctorController.logout);
 
 // Admin routes for online doctors
 router.get('/online', doctorController.getOnlineDoctors);
-
 // Public routes for finding doctors
+
 router.get('/slug/:slug', doctorController.getDoctorBySlug);
 router.get('/uid/:doctorUID', doctorController.getDoctorByUID);
 
 // Document routes
+
 router.post('/upload-file', verifyDoctorToken, uploadDocument, handleUploadError, doctorController.uploadFile);
 router.post('/upload-document', verifyDoctorToken, doctorController.uploadDocument);
 router.get('/documents', verifyDoctorToken, doctorController.getDocuments);

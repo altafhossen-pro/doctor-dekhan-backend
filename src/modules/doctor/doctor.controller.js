@@ -297,9 +297,9 @@ exports.getProfile = async (req, res) => {
     try {
         const doctor = req.doctor;
         
-        // Update doctor heartbeat when profile is accessed
-        if (global.updateDoctorHeartbeat) {
-            global.updateDoctorHeartbeat(doctor._id.toString());
+        // Mark doctor as online immediately when profile is accessed
+        if (global.setDoctorOnline) {
+            global.setDoctorOnline(doctor._id.toString(), 'profile-access');
         }
         
         // Check if doctor is ready for verification
