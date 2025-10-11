@@ -61,6 +61,67 @@ exports.sendOTP = async (req, res) => {
         }
     };
 
+// Send OTP for registration (checks if user already exists)
+exports.sendRegisterOTP = async (req, res) => {
+    try {
+        const { phone } = req.body;
+
+        // Validate phone number format
+        const phoneRegex = /^(\+88|88)?01[3-9]\d{8}$/;
+        if (!phone || !phoneRegex.test(phone)) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Please provide a valid Bangladesh mobile number (01XXXXXXXXX)'
+            });
+        }
+
+        // Normalize phone number
+        const normalizedPhone = normalizePhone(phone);
+
+        // Call service method
+        const result = await userService.sendRegisterOTP(normalizedPhone);
+
+        // If user already exists, return 400 with specific message
+        if (!result.success && result.data?.userExists) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: result.message,
+                data: result.data
+            });
+        }
+
+        // If successful, return 200
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: result.success,
+            message: result.message,
+            data: result.data
+        });
+
+    } catch (error) {
+        if (error.message.includes('already registered as a doctor')) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: error.message
+            });
+        }
+
+        sendResponse({
+            res,
+            statusCode: 500,
+            success: false,
+            message: error.message || 'Internal server error'
+        });
+    }
+};
+
 // Verify OTP and check if user exists
 exports.verifyOTP = async (req, res) => {
         try {

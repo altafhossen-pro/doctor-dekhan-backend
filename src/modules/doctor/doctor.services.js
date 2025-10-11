@@ -54,7 +54,20 @@ exports.sendRegisterOTP = async (phone) => {
         // For registration: Check if phone is already used by a regular user
         const existingUser = await User.findOne({ phone });
         if (existingUser) {
-            throw new Error('This phone number is already registered. Please try again with another number.');
+            throw new Error('This phone number is already registered as a user. Please use a different phone number for doctor registration.');
+        }
+
+        // Check if doctor already exists
+        const existingDoctor = await Doctor.findOne({ phone });
+        if (existingDoctor) {
+            return {
+                success: false,
+                message: 'This phone number is already registered as a doctor. Please login instead of registering.',
+                data: {
+                    doctorExists: true,
+                    redirectTo: 'login'
+                }
+            };
         }
 
         // Use the internal OTP service (without cross-role validation)
@@ -91,37 +104,13 @@ exports.sendLoginOTP = async (phone) => {
     }
 };
 
-// Verify OTP for doctor
-exports.verifyOTP = async (phone, otp) => {
+// Verify OTP for doctor registration
+exports.verifyRegisterOTP = async (phone, otp) => {
     try {
-        // First verify the OTP
+        // Verify the OTP
         const otpResult = await verifyOTP(phone, otp);
 
-        // After OTP verification, check if doctor already exists
-        const existingDoctor = await Doctor.findOne({ phone });
-
-        if (existingDoctor) {
-            // If doctor exists, generate tokens and return login data
-            const tokens = exports.generateTokens(existingDoctor._id);
-
-            // Update last login
-            await Doctor.findByIdAndUpdate(existingDoctor._id, { lastLoginAt: new Date() });
-
-            return {
-                success: true,
-                message: 'OTP verified successfully. Login successful.',
-                data: {
-                    isExistingUser: true,
-                    shouldLogin: true,
-                    redirectTo: 'login',
-                    doctor: existingDoctor,
-                    accessToken: tokens.accessToken,
-                    refreshToken: tokens.refreshToken
-                }
-            };
-        }
-
-        // If doctor doesn't exist, return success for registration
+        // OTP verified successfully - proceed with registration
         return {
             success: true,
             message: 'OTP verified successfully. You can now proceed with registration.',
@@ -137,6 +126,44 @@ exports.verifyOTP = async (phone, otp) => {
     }
 };
 
+// Verify OTP for doctor login
+exports.verifyLoginOTP = async (phone, otp) => {
+    try {
+        // First check if doctor exists
+        const doctor = await Doctor.findOne({ phone });
+        if (!doctor) {
+            throw new Error('No doctor found with this phone number. Please register first.');
+        }
+
+        // Check if doctor is active
+        if (!doctor.isActive) {
+            throw new Error('Your account is deactivated. Please contact support.');
+        }
+
+        // Verify the OTP
+        const otpResult = await verifyOTP(phone, otp);
+
+        // Generate tokens for login
+        const tokens = exports.generateTokens(doctor._id);
+
+        // Update last login
+        await Doctor.findByIdAndUpdate(doctor._id, { lastLoginAt: new Date() });
+
+        return {
+            success: true,
+            message: 'OTP verified successfully. Login successful.',
+            data: {
+                doctor: doctor.getPublicProfile(),
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                redirectTo: 'dashboard'
+            }
+        };
+    } catch (error) {
+        throw error;
+    }
+};
+
 // Create new doctor
 exports.createDoctor = async (doctorData) => {
     try {
@@ -145,7 +172,7 @@ exports.createDoctor = async (doctorData) => {
             $or: [
                 { email: doctorData.email },
                 { phone: doctorData.phone },
-                ...(doctorData.bmdcNumber ? [{ bmdcNumber: doctorData.bmdcNumber }] : [])
+                ...(doctorData.bmdcNumber && doctorData.bmdcNumber.trim() !== '' ? [{ bmdcNumber: doctorData.bmdcNumber }] : [])
             ]
         });
 
@@ -166,10 +193,10 @@ exports.createDoctor = async (doctorData) => {
             specialization: doctorData.specialization,
             currentHospital: doctorData.currentHospital,
             consultationFee: doctorData.consultationFee,
-            // Optional fields - only include if provided
-            ...(doctorData.experience && { experience: doctorData.experience }),
-            ...(doctorData.qualification && { qualification: doctorData.qualification }),
-            ...(doctorData.bmdcNumber && { bmdcNumber: doctorData.bmdcNumber }),
+            // Optional fields - only include if provided and not empty
+            ...(doctorData.experience && doctorData.experience !== '' && { experience: doctorData.experience }),
+            ...(doctorData.qualification && doctorData.qualification.trim() !== '' && { qualification: doctorData.qualification }),
+            ...(doctorData.bmdcNumber && doctorData.bmdcNumber.trim() !== '' && { bmdcNumber: doctorData.bmdcNumber }),
             status: 'pending',
             isActive: true,
             isAvailable: false
@@ -274,7 +301,6 @@ exports.updateDoctorProfile = async (doctorId, updateData) => {
         }
         return updatedDoctor;
     } catch (error) {
-        console.log("❌ Error in updateDoctorProfile:", error.message);
         throw error;
     }
 };
@@ -373,15 +399,10 @@ exports.deactivateDoctor = async (doctorId) => {
 // Upload document for doctor
 exports.uploadDocument = async (doctorId, documentData) => {
     try {
-        console.log('🔍 Uploading document for doctor:', doctorId, documentData);
-
         const doctor = await Doctor.findById(doctorId);
         if (!doctor) {
             throw new Error('Doctor not found');
         }
-
-        console.log('👨‍⚕️ Doctor found:', doctor.firstName, doctor.lastName);
-        console.log('📄 Current documents:', doctor.documents.length);
 
         // Check if document type already exists
         const existingDoc = doctor.documents.find(doc => doc.type === documentData.type);
@@ -389,7 +410,6 @@ exports.uploadDocument = async (doctorId, documentData) => {
         // For degree certificates, always add new (multiple allowed)
         // For other documents, update existing or add new
         if (documentData.type === 'mbbs_degree') {
-            console.log('➕ Adding new degree certificate (multiple allowed):', documentData.type);
             // Always add new degree certificate
             doctor.documents.push({
                 type: documentData.type,
@@ -402,7 +422,6 @@ exports.uploadDocument = async (doctorId, documentData) => {
                 rejected: false
             });
         } else if (existingDoc) {
-            console.log('🔄 Updating existing document:', existingDoc.type);
             // Update existing document (for BMDC, NID, etc.)
             existingDoc.url = documentData.url;
             existingDoc.originalName = documentData.originalName;
@@ -412,7 +431,6 @@ exports.uploadDocument = async (doctorId, documentData) => {
             existingDoc.verified = false;
             existingDoc.rejected = false;
         } else {
-            console.log('➕ Adding new document:', documentData.type);
             // Add new document
             doctor.documents.push({
                 type: documentData.type,
@@ -426,9 +444,7 @@ exports.uploadDocument = async (doctorId, documentData) => {
             });
         }
 
-        console.log('💾 Saving doctor with documents:', doctor.documents.length);
         await doctor.save();
-        console.log('✅ Doctor saved successfully');
 
         // Check if all required documents are now uploaded
         const requiredDocuments = ['bmdc_certificate', 'mbbs_degree', 'nid_front', 'nid_back'];
@@ -451,33 +467,15 @@ exports.uploadDocument = async (doctorId, documentData) => {
 
         const hasAllProfileFields = hasFirstName && hasLastName && hasBMDCNumber && hasExperience && hasQualification;
 
-        console.log('🔍 Document and Profile check (upload):', {
-            requiredDocuments,
-            uploadedDocuments,
-            hasBMDC,
-            hasDegree,
-            hasNIDFront,
-            hasNIDBack,
-            hasAllDocuments,
-            hasFirstName,
-            hasLastName,
-            hasBMDCNumber,
-            hasExperience,
-            hasQualification,
-            hasAllProfileFields,
-            isReadyForVerification: doctor.isReadyForVerification
-        });
 
         // Update isReadyForVerification status - both documents AND profile fields must be complete
         if (hasAllDocuments && hasAllProfileFields && !doctor.isReadyForVerification) {
             doctor.isReadyForVerification = true;
             await doctor.save();
-            console.log('✅ Doctor is now ready for verification:', doctor.firstName, doctor.lastName);
         }
 
         return doctor;
     } catch (error) {
-        console.error('❌ Error uploading document:', error);
         throw error;
     }
 };
@@ -562,7 +560,6 @@ exports.approveDoctor = async (doctorId) => {
             throw new Error('Doctor not found');
         }
 
-        console.log('✅ Doctor approved:', doctor.firstName, doctor.lastName, 'at', doctor.approvedAt);
         return doctor;
     } catch (error) {
         throw error;
@@ -587,7 +584,6 @@ exports.rejectDoctor = async (doctorId, adminId, rejectionReason) => {
             throw new Error('Doctor not found');
         }
 
-        console.log('❌ Doctor rejected:', doctor.firstName, doctor.lastName, 'Reason:', rejectionReason);
         return doctor;
     } catch (error) {
         throw error;

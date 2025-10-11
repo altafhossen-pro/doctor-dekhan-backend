@@ -40,6 +40,17 @@ exports.sendRegisterOTP = async (req, res) => {
         const normalizedPhone = normalizePhone(phone);
         const result = await doctorService.sendRegisterOTP(normalizedPhone);
         
+        // If doctor already exists, return 400 with specific message
+        if (!result.success && result.data?.doctorExists) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: result.message,
+                data: result.data
+            });
+        }
+
         sendResponse({
             res,
             statusCode: 200,
@@ -91,8 +102,8 @@ exports.sendLoginOTP = async (req, res) => {
     }
 };
 
-// Verify OTP for doctor
-exports.verifyOTP = async (req, res) => {
+// Verify OTP for doctor registration
+exports.verifyRegisterOTP = async (req, res) => {
     try {
         const { phone, otp } = req.body;
         
@@ -106,31 +117,48 @@ exports.verifyOTP = async (req, res) => {
         }
 
         const normalizedPhone = normalizePhone(phone);
-        const result = await doctorService.verifyOTP(normalizedPhone, otp);
-        
-        // Check if user should login instead of register
-        if (result.data.isExistingUser) {
-            return sendResponse({
-                res,
-                statusCode: 200,
-                success: true,
-                message: result.message,
-                data: {
-                    ...result.data,
-                    redirectTo: 'login'
-                }
-            });
-        }
+        const result = await doctorService.verifyRegisterOTP(normalizedPhone, otp);
         
         sendResponse({
             res,
             statusCode: 200,
             success: true,
             message: result.message,
-            data: {
-                ...result.data,
-                redirectTo: 'register'
-            }
+            data: result.data
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Verify OTP for doctor login
+exports.verifyLoginOTP = async (req, res) => {
+    try {
+        const { phone, otp } = req.body;
+        
+        if (!phone || !otp) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Phone number and OTP are required'
+            });
+        }
+
+        const normalizedPhone = normalizePhone(phone);
+        const result = await doctorService.verifyLoginOTP(normalizedPhone, otp);
+        
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: result.message,
+            data: result.data
         });
     } catch (error) {
         sendResponse({
@@ -213,7 +241,6 @@ exports.loginDoctor = async (req, res) => {
         
 
         const result = await doctorService.loginDoctor(doctor);
-        console.log(result);
         
         sendResponse({
             res,
@@ -348,9 +375,6 @@ exports.uploadDocument = async (req, res) => {
     try {
         const { type, url, originalName, fileSize, mimeType } = req.body;
         
-        console.log('📤 Document upload request:', { type, url, originalName, fileSize, mimeType });
-        console.log('👨‍⚕️ Doctor ID:', req.doctor._id);
-        
         if (!type || !url || !originalName || !fileSize || !mimeType) {
             return sendResponse({
                 res,
@@ -368,9 +392,7 @@ exports.uploadDocument = async (req, res) => {
             mimeType
         };
 
-        console.log('📋 Document data prepared:', documentData);
         const doctor = await doctorService.uploadDocument(req.doctor._id, documentData);
-        console.log('✅ Document uploaded, doctor documents count:', doctor.documents.length);
         
         const isReadyForVerification = await doctorService.checkOrSetIsReadyForVerification(req.doctor._id);
         sendResponse({
@@ -384,7 +406,6 @@ exports.uploadDocument = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ Document upload error:', error);
         sendResponse({
             res,
             statusCode: 400,

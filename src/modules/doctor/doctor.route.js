@@ -7,7 +7,8 @@ const { uploadDocument, handleUploadError } = require('../../utils/fileUpload');
 // Public routes (no authentication required)
 router.post('/send-register-otp', doctorController.sendRegisterOTP);
 router.post('/send-login-otp', doctorController.sendLoginOTP);
-router.post('/verify-otp', doctorController.verifyOTP);
+router.post('/verify-register-otp', doctorController.verifyRegisterOTP);
+router.post('/verify-login-otp', doctorController.verifyLoginOTP);
 router.post('/register', doctorController.registerDoctor);
 router.post('/login', doctorController.loginDoctor);
 router.post('/refresh-token', doctorController.refreshToken);

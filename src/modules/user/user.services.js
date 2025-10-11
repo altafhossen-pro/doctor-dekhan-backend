@@ -219,6 +219,109 @@ exports.sendOTPInternal = async (phone) => {
     }
 };
 
+// Send OTP for registration (checks if user already exists)
+exports.sendRegisterOTP = async (phone) => {
+    try {
+        // Check if phone number is already used by a doctor
+        const existingDoctor = await Doctor.findOne({ phone });
+        if (existingDoctor) {
+            throw new Error('This phone number is already registered as a doctor. Please use a different phone number for user registration.');
+        }
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ phone });
+        if (existingUser) {
+            return {
+                success: false,
+                message: 'User already exists with this phone number. Please login instead.',
+                data: {
+                    userExists: true,
+                    redirectTo: 'login'
+                }
+            };
+        }
+
+        // Clean up expired OTPs globally (lightweight cleanup)
+        await cleanupOTPs();
+
+        // Check if there's already a valid (unused, not expired) OTP for this phone
+        const existingOTP = await OTP.findOne({
+            phone,
+            type: 'phone_verification',
+            isUsed: false,
+            expiresAt: { $gt: new Date() }
+        });
+
+        if (existingOTP) {
+            // Update existing OTP with new code and expiry
+            const otpCode = exports.generateOTP();
+            existingOTP.otp = otpCode;
+            existingOTP.expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes from now
+            existingOTP.attempts = 0; // Reset attempts
+            existingOTP.isBlocked = false; // Reset block status
+            existingOTP.blockedUntil = null; // Clear block time
+            await existingOTP.save();
+
+            // TODO: Send OTP via SMS service
+            console.log(`🔐 DEVELOPMENT REGISTER OTP for ${phone}: ${otpCode} (Updated existing)`);
+
+            return {
+                success: true,
+                message: 'OTP sent successfully for registration',
+                data: {
+                    phone,
+                    expiresIn: '2 minutes',
+                    userExists: false
+                }
+            };
+        } else {
+            // No valid OTP exists, create new one
+            // First, clean up all expired/used OTPs for this phone number
+            await OTP.deleteMany({ 
+                phone, 
+                type: 'phone_verification',
+                $or: [
+                    { expiresAt: { $lt: new Date() } }, // Expired OTPs
+                    { isUsed: true } // Used OTPs
+                ]
+            });
+
+            // Generate new OTP
+            const otpCode = exports.generateOTP();
+            const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes from now
+
+            // Create new OTP record
+            const newOTP = new OTP({
+                phone,
+                otp: otpCode,
+                type: 'phone_verification',
+                expiresAt,
+                attempts: 0,
+                isUsed: false,
+                isBlocked: false
+            });
+
+            await newOTP.save();
+
+            // TODO: Send OTP via SMS service
+            console.log(`🔐 DEVELOPMENT REGISTER OTP for ${phone}: ${otpCode} (New)`);
+
+            return {
+                success: true,
+                message: 'OTP sent successfully for registration',
+                data: {
+                    phone,
+                    expiresIn: '2 minutes',
+                    userExists: false
+                }
+            };
+        }
+
+    } catch (error) {
+        throw new Error(error.message || 'Failed to send registration OTP');
+    }
+};
+
 // Verify OTP and check user existence
 exports.verifyOTP = async (phone, otp) => {
     try {

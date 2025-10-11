@@ -205,7 +205,7 @@ const doctorSchema = new mongoose.Schema({
 // Indexes for better performance
 doctorSchema.index({ email: 1 });
 doctorSchema.index({ phone: 1 });
-doctorSchema.index({ bmdcNumber: 1 });
+doctorSchema.index({ bmdcNumber: 1 }, { sparse: true }); // Sparse index allows multiple null values
 doctorSchema.index({ status: 1 });
 doctorSchema.index({ specialization: 1 });
 doctorSchema.index({ isActive: 1, isAvailable: 1 });

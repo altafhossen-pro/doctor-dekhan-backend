@@ -5,6 +5,7 @@ const { verifyToken } = require('../../middleware/verifyToken');
 
 // Public routes (no authentication required)
 router.post('/send-otp', userController.sendOTP);
+router.post('/send-register-otp', userController.sendRegisterOTP);
 router.post('/verify-otp', userController.verifyOTP);
 router.post('/complete-registration', userController.completeRegistration);
 router.post('/refresh-token', userController.refreshToken);
