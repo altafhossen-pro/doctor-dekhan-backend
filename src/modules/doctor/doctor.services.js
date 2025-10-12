@@ -197,7 +197,7 @@ exports.createDoctor = async (doctorData) => {
             phone: doctorData.phone,
             slug: slug,
             doctorUID: doctorUID,
-            specialization: doctorData.specialization,
+            department: doctorData.department,
             currentHospital: doctorData.currentHospital,
             consultationFee: doctorData.consultationFee,
             // Optional fields - only include if provided and not empty
@@ -303,7 +303,7 @@ exports.refreshAccessToken = async (refreshToken) => {
 // Get doctor profile
 exports.getDoctorProfile = async (doctorId) => {
     try {
-        const doctor = await Doctor.findById(doctorId);
+        const doctor = await Doctor.findById(doctorId).populate('department', 'name slug description icon color');
         if (!doctor) {
             throw new Error('Doctor not found');
         }
@@ -340,11 +340,12 @@ exports.getAllDoctors = async (filters = {}) => {
             query.status = filters.status;
         }
 
-        if (filters.specialization) {
-            query.specialization = new RegExp(filters.specialization, 'i');
+        if (filters.department) {
+            query.department = filters.department;
         }
 
         const doctors = await Doctor.find(query)
+            .populate('department', 'name slug description icon color')
             .select('-__v')
             .sort({ createdAt: -1 });
 
@@ -666,7 +667,7 @@ exports.checkOrSetIsReadyForVerification = async (doctorId) => {
 
 exports.getDoctorById = async (doctorId) => {
     try {
-        const doctor = await Doctor.findById(doctorId);
+        const doctor = await Doctor.findById(doctorId).populate('department', 'name slug description icon color');
         return doctor;
     } catch (error) {
         throw error;
@@ -699,7 +700,7 @@ exports.getAllDoctorsForAdmin = async (options) => {
                 { firstName: { $regex: search, $options: 'i' } },
                 { lastName: { $regex: search, $options: 'i' } },
                 { email: { $regex: search, $options: 'i' } },
-                { specialization: { $regex: search, $options: 'i' } },
+                { 'department.name': { $regex: search, $options: 'i' } },
                 { bmdcNumber: { $regex: search, $options: 'i' } }
             ];
         }
@@ -714,6 +715,7 @@ exports.getAllDoctorsForAdmin = async (options) => {
         // Execute query
         const [doctors, totalCount] = await Promise.all([
             Doctor.find(query)
+                .populate('department', 'name slug description icon color')
                 .select('-password -refreshToken')
                 .sort(sort)
                 .skip(skip)

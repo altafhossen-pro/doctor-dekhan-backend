@@ -17,7 +17,7 @@ exports.verifyDoctorToken = async (req, res, next) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
         // Find full user data from database
-        const doctor = await Doctor.findById(decoded.doctorId);
+        const doctor = await Doctor.findById(decoded.doctorId).populate('department', 'name slug description icon color');
        
         if (!doctor) {
             return sendResponse({

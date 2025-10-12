@@ -85,7 +85,9 @@ exports.getDoctorProfile = async (doctorId) => {
 
 exports.getDoctorById = async (doctorId) => {
     try {
-        const doctor = await Doctor.findById(doctorId).select('-password');
+        const doctor = await Doctor.findById(doctorId)
+            .populate('department', 'name slug description icon color')
+            .select('-password');
         if (!doctor) {
             throw new Error('Doctor not found');
         }
@@ -161,5 +163,66 @@ exports.getDoctorStats = async () => {
         };
     } catch (error) {
         throw new Error(`Failed to fetch doctor statistics: ${error.message}`);
+    }
+};
+
+// Toggle doctor edit profile permission
+exports.toggleEditProfilePermission = async (doctorId, updateData) => {
+    try {
+        const doctor = await Doctor.findByIdAndUpdate(
+            doctorId,
+            {
+                isCurrentlyHaveEditProfile: updateData.isCurrentlyHaveEditProfile,
+                updatedBy: updateData.updatedBy
+            },
+            { new: true, runValidators: true }
+        ).populate('department', 'name slug description icon color');
+
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        return doctor;
+    } catch (error) {
+        throw new Error(`Failed to toggle edit profile permission: ${error.message}`);
+    }
+};
+
+// Update doctor information
+exports.updateDoctor = async (doctorId, updateData) => {
+    try {
+        // Remove fields that shouldn't be updated directly
+        const { updatedBy, ...allowedUpdates } = updateData;
+        
+        // Only allow specific fields to be updated
+        const allowedFields = [
+            'firstName', 'lastName', 'email', 'phone', 'department',
+            'experience', 'qualification', 'bmdcNumber', 'currentHospital',
+            'consultationFee'
+        ];
+        
+        const filteredUpdates = {};
+        Object.keys(allowedUpdates).forEach(key => {
+            if (allowedFields.includes(key)) {
+                filteredUpdates[key] = allowedUpdates[key];
+            }
+        });
+        
+        // Add updatedBy
+        filteredUpdates.updatedBy = updatedBy;
+
+        const doctor = await Doctor.findByIdAndUpdate(
+            doctorId,
+            filteredUpdates,
+            { new: true, runValidators: true }
+        ).populate('department', 'name slug description icon color');
+
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        return doctor;
+    } catch (error) {
+        throw new Error(`Failed to update doctor: ${error.message}`);
     }
 };

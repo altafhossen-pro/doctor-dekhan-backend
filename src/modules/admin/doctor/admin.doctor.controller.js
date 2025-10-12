@@ -154,3 +154,68 @@ exports.getDoctorStats = async (req, res) => {
         });
     }
 };
+
+// Toggle doctor edit profile permission
+exports.toggleEditProfilePermission = async (req, res) => {
+    try {
+        const { doctorId } = req.params;
+        const { isCurrentlyHaveEditProfile } = req.body;
+
+        if (typeof isCurrentlyHaveEditProfile !== 'boolean') {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'isCurrentlyHaveEditProfile must be a boolean value'
+            });
+        }
+
+        const updatedDoctor = await doctorService.toggleEditProfilePermission(doctorId, {
+            isCurrentlyHaveEditProfile,
+            updatedBy: req.admin._id
+        });
+
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: `Doctor edit profile permission ${isCurrentlyHaveEditProfile ? 'enabled' : 'disabled'} successfully`,
+            data: { doctor: updatedDoctor }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Update doctor information
+exports.updateDoctor = async (req, res) => {
+    try {
+        const { doctorId } = req.params;
+        const updateData = req.body;
+
+        // Add updatedBy field
+        updateData.updatedBy = req.admin._id;
+
+        const updatedDoctor = await doctorService.updateDoctor(doctorId, updateData);
+
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Doctor updated successfully',
+            data: { doctor: updatedDoctor }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};

@@ -31,10 +31,22 @@ router.put('/:doctorId/status',
   doctorAdminController.updateDoctorStatus
 );
 
+// Update doctor information
+router.patch('/:doctorId', 
+  checkAdminPermission('manage_doctors'), 
+  doctorAdminController.updateDoctor
+);
+
 // Delete doctor
 router.delete('/:doctorId', 
   checkAdminPermission('manage_doctors'), 
   doctorAdminController.deleteDoctor
+);
+
+// Toggle doctor edit profile permission
+router.patch('/:doctorId/edit-permission', 
+  checkAdminPermission('manage_doctors'), 
+  doctorAdminController.toggleEditProfilePermission
 );
 
 module.exports = router;

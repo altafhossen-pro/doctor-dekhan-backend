@@ -4,15 +4,19 @@ const router = express.Router();
 const doctorRoutes = require('../modules/doctor/doctor.route');
 const userRoutes = require('../modules/user/user.route');
 const logsRoutes = require('../modules/logs/logs.route');
+const departmentRoutes = require('../modules/department/department.route');
 const adminDoctorRoutes = require('../modules/admin/doctor/admin.doctor.route');
 const adminUserRoutes = require('../modules/admin/user/admin.user.route');
+const adminDepartmentRoutes = require('../modules/admin/department/admin.department.route');
 const adminAuthRoutes = require('../modules/admin/auth/admin.route');
 
 router.use('/doctor', doctorRoutes);
 router.use('/user', userRoutes);
 router.use('/logs', logsRoutes);
+router.use('/department', departmentRoutes);
 router.use('/admin/doctor', adminDoctorRoutes);
 router.use('/admin/user', adminUserRoutes);
+router.use('/admin/department', adminDepartmentRoutes);
 router.use('/admin/auth', adminAuthRoutes);
 
 // Health check route

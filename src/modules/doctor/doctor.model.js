@@ -48,11 +48,10 @@ const doctorSchema = new mongoose.Schema({
     },
     
     // Professional Information
-    specialization: {
-        type: String,
-        required: [true, 'Specialization is required'],
-        trim: true,
-        maxlength: [100, 'Specialization cannot exceed 100 characters']
+    department: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Department',
+        required: [true, 'Department is required']
     },
     experience: {
         type: Number,
@@ -224,7 +223,7 @@ doctorSchema.index({ email: 1 });
 doctorSchema.index({ phone: 1 });
 doctorSchema.index({ bmdcNumber: 1 }, { sparse: true }); // Sparse index allows multiple null values
 doctorSchema.index({ status: 1 });
-doctorSchema.index({ specialization: 1 });
+doctorSchema.index({ department: 1 });
 doctorSchema.index({ isActive: 1, isAvailable: 1 });
 
 // Virtual for full name
@@ -247,7 +246,7 @@ doctorSchema.methods.getPublicProfile = function() {
         firstName: this.firstName,
         lastName: this.lastName,
         name: this.fullName,
-        specialization: this.specialization,
+        department: this.department,
         experience: this.experience,
         qualification: this.qualification,
         bmdcNumber: this.bmdcNumber,

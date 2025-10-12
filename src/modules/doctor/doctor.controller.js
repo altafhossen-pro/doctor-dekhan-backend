@@ -176,7 +176,7 @@ exports.registerDoctor = async (req, res) => {
         const doctorData = req.body;
         
         // Validate required fields (only essential ones)
-        const requiredFields = ['firstName', 'lastName', 'email', 'phone', 'specialization', 'currentHospital', 'consultationFee'];
+        const requiredFields = ['firstName', 'lastName', 'email', 'phone', 'department', 'currentHospital', 'consultationFee'];
         const missingFields = requiredFields.filter(field => !doctorData[field]);
         
         if (missingFields.length > 0) {
