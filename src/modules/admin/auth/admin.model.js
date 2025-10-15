@@ -128,7 +128,7 @@ adminSchema.methods.generateAccessToken = function() {
       type: 'access'
     },
     process.env.JWT_SECRET,
-    { expiresIn: '1d' }
+    { expiresIn: '1m' }
   );
 };
 

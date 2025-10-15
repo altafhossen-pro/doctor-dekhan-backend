@@ -9,6 +9,7 @@ exports.getAllDoctors = async (req, res) => {
             limit = 10,
             search = '',
             status = 'all',
+            isVerificationStatusSended ,
             sortBy = 'createdAt',
             sortOrder = 'desc'
         } = req.query;
@@ -18,6 +19,7 @@ exports.getAllDoctors = async (req, res) => {
             limit: parseInt(limit),
             search,
             status,
+            isVerificationStatusSended,
             sortBy,
             sortOrder
         });
@@ -209,6 +211,119 @@ exports.updateDoctor = async (req, res) => {
             success: true,
             message: 'Doctor updated successfully',
             data: { doctor: updatedDoctor }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Toggle pricing editing for doctor
+exports.togglePricingEdit = async (req, res) => {
+    try {
+        const { doctorId } = req.params;
+        const { canEdit } = req.body;
+        const adminId = req.admin._id;
+
+        if (typeof canEdit !== 'boolean') {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'canEdit must be a boolean value'
+            });
+        }
+
+        const doctor = await doctorService.togglePricingEdit(doctorId, canEdit, adminId);
+
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: `Pricing editing ${canEdit ? 'enabled' : 'disabled'} successfully`,
+            data: { doctor }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Approve pending pricing updates
+exports.approvePendingPricing = async (req, res) => {
+    try {
+        const { doctorId } = req.params;
+        const adminId = req.admin._id;
+
+        const doctor = await doctorService.approvePendingPricing(doctorId, adminId);
+
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Pending pricing updates approved successfully',
+            data: { doctor }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Reject pending pricing updates
+exports.rejectPendingPricing = async (req, res) => {
+    try {
+        const { doctorId } = req.params;
+        const { reason } = req.body;
+        const adminId = req.admin._id;
+
+        const doctor = await doctorService.rejectPendingPricing(doctorId, adminId, reason);
+
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Pending pricing updates rejected successfully',
+            data: { doctor }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Get doctors with pending pricing updates
+exports.getDoctorsWithPendingPricing = async (req, res) => {
+    try {
+        const { page = 1, limit = 10 } = req.query;
+
+        const result = await doctorService.getDoctorsWithPendingPricing({
+            page: parseInt(page),
+            limit: parseInt(limit)
+        });
+
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Doctors with pending pricing retrieved successfully',
+            data: result
         });
     } catch (error) {
         sendResponse({

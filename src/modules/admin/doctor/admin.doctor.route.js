@@ -26,7 +26,7 @@ router.get('/:doctorId',
 );
 
 // Update doctor status (approve/reject)
-router.put('/:doctorId/status', 
+router.patch('/:doctorId/status', 
   checkAdminPermission('manage_doctors'), 
   doctorAdminController.updateDoctorStatus
 );
@@ -47,6 +47,30 @@ router.delete('/:doctorId',
 router.patch('/:doctorId/edit-permission', 
   checkAdminPermission('manage_doctors'), 
   doctorAdminController.toggleEditProfilePermission
+);
+
+// Toggle pricing editing for doctor
+router.put('/:doctorId/toggle-pricing', 
+  checkAdminPermission('manage_doctors'), 
+  doctorAdminController.togglePricingEdit
+);
+
+// Approve pending pricing updates
+router.post('/:doctorId/approve-pricing', 
+  checkAdminPermission('manage_doctors'), 
+  doctorAdminController.approvePendingPricing
+);
+
+// Reject pending pricing updates
+router.post('/:doctorId/reject-pricing', 
+  checkAdminPermission('manage_doctors'), 
+  doctorAdminController.rejectPendingPricing
+);
+
+// Get doctors with pending pricing updates
+router.get('/pending-pricing', 
+  checkAdminPermission('manage_doctors'), 
+  doctorAdminController.getDoctorsWithPendingPricing
 );
 
 module.exports = router;

@@ -10,7 +10,7 @@ exports.generateAccessToken = (doctorId) => {
     return jwt.sign(
         { doctorId, type: 'access' },
         process.env.JWT_SECRET,
-        { expiresIn: '30d' }
+        { expiresIn: '30d' } // 30 days access token
     );
 };
 
@@ -19,7 +19,7 @@ exports.generateRefreshToken = (doctorId) => {
     return jwt.sign(
         { doctorId, type: 'refresh' },
         process.env.JWT_REFRESH_SECRET,
-        { expiresIn: '30d' }
+        { expiresIn: '90d' } // 3 months refresh token
     );
 };
 
@@ -197,7 +197,7 @@ exports.createDoctor = async (doctorData) => {
             phone: doctorData.phone,
             slug: slug,
             doctorUID: doctorUID,
-            department: doctorData.department,
+            departments: doctorData.departments,
             currentHospital: doctorData.currentHospital,
             consultationFee: doctorData.consultationFee,
             // Optional fields - only include if provided and not empty
@@ -303,7 +303,7 @@ exports.refreshAccessToken = async (refreshToken) => {
 // Get doctor profile
 exports.getDoctorProfile = async (doctorId) => {
     try {
-        const doctor = await Doctor.findById(doctorId).populate('department', 'name slug description icon color');
+        const doctor = await Doctor.findById(doctorId).populate('departments', 'name slug description icon color');
         if (!doctor) {
             throw new Error('Doctor not found');
         }
@@ -345,7 +345,7 @@ exports.getAllDoctors = async (filters = {}) => {
         }
 
         const doctors = await Doctor.find(query)
-            .populate('department', 'name slug description icon color')
+            .populate('departments', 'name slug description icon color')
             .select('-__v')
             .sort({ createdAt: -1 });
 
@@ -553,15 +553,80 @@ exports.verifyDocument = async (doctorId, documentId, adminId, verified, notes) 
 // Update doctor profile
 exports.updateDoctorProfile = async (doctorId, updateData) => {
     try {
-        const doctor = await Doctor.findByIdAndUpdate(
-            doctorId,
-            updateData,
-            { new: true, runValidators: true }
-        );
-
+        const doctor = await Doctor.findById(doctorId);
         if (!doctor) {
             throw new Error('Doctor not found');
         }
+
+        // Check if doctor can edit profile (not submitted for approval)
+        if (doctor.isVerificationStatusSended === true) {
+            throw new Error('Cannot update profile after submission for approval');
+        }
+
+        // Handle department pricing separately to ensure proper validation
+        if (updateData.departmentPricing) {
+            // Check if doctor can edit pricing
+            if (!doctor.canEditPricingNow()) {
+                throw new Error('Pricing editing is currently disabled. Contact support to enable pricing updates.');
+            }
+
+            // Validate department pricing
+            if (!Array.isArray(updateData.departmentPricing)) {
+                throw new Error('Department pricing must be an array');
+            }
+
+            // Validate each pricing entry
+            for (const pricing of updateData.departmentPricing) {
+                if (!pricing.department || !pricing.fee) {
+                    throw new Error('Each department pricing must have department and fee');
+                }
+                if (typeof pricing.fee !== 'number' || pricing.fee < 0) {
+                    throw new Error('Department fee must be a non-negative number');
+                }
+            }
+
+            // Move current approved pricing to pending if there are changes
+            const newPendingPricing = [];
+            
+            for (const newPricing of updateData.departmentPricing) {
+                const currentApproved = doctor.approvedDepartmentPricing.find(p => 
+                    p.department.toString() === newPricing.department.toString()
+                );
+                
+                if (currentApproved && currentApproved.fee !== newPricing.fee) {
+                    // Fee has changed, add to pending
+                    newPendingPricing.push({
+                        department: newPricing.department,
+                        fee: newPricing.fee,
+                        previousFee: currentApproved.fee,
+                        submittedAt: new Date()
+                    });
+                } else if (!currentApproved) {
+                    // New department pricing
+                    newPendingPricing.push({
+                        department: newPricing.department,
+                        fee: newPricing.fee,
+                        previousFee: 0,
+                        submittedAt: new Date()
+                    });
+                }
+            }
+
+            // Update pending pricing
+            doctor.pendingDepartmentPricing = newPendingPricing;
+
+            // Remove departmentPricing from updateData to avoid duplicate update
+            delete updateData.departmentPricing;
+        }
+
+        // Update other fields
+        Object.keys(updateData).forEach(key => {
+            if (updateData[key] !== undefined) {
+                doctor[key] = updateData[key];
+            }
+        });
+
+        await doctor.save();
 
         return doctor;
     } catch (error) {
@@ -570,21 +635,41 @@ exports.updateDoctorProfile = async (doctorId, updateData) => {
 };
 
 // Approve doctor (admin only)
-exports.approveDoctor = async (doctorId) => {
+exports.approveDoctor = async (doctorId, adminId) => {
     try {
-        const doctor = await Doctor.findByIdAndUpdate(
-            doctorId,
-            {
-                status: 'approved',
-                approvedAt: new Date(),
-                verifiedAt: new Date()
-            },
-            { new: true, runValidators: true }
-        );
-
+        const doctor = await Doctor.findById(doctorId);
         if (!doctor) {
             throw new Error('Doctor not found');
         }
+
+        // Update doctor status
+        doctor.status = 'approved';
+        doctor.approvedAt = new Date();
+        doctor.verifiedAt = new Date();
+        doctor.verifiedBy = adminId;
+
+        // Move pending pricing to approved pricing
+        if (doctor.pendingDepartmentPricing && doctor.pendingDepartmentPricing.length > 0) {
+            doctor.pendingDepartmentPricing.forEach(pendingPricing => {
+                // Remove existing approved pricing for this department
+                doctor.approvedDepartmentPricing = doctor.approvedDepartmentPricing.filter(p => 
+                    p.department.toString() !== pendingPricing.department.toString()
+                );
+                
+                // Add new approved pricing
+                doctor.approvedDepartmentPricing.push({
+                    department: pendingPricing.department,
+                    fee: pendingPricing.fee,
+                    approvedAt: new Date(),
+                    approvedBy: adminId
+                });
+            });
+            
+            // Clear pending pricing
+            doctor.pendingDepartmentPricing = [];
+        }
+
+        await doctor.save();
 
         return doctor;
     } catch (error) {
@@ -667,7 +752,7 @@ exports.checkOrSetIsReadyForVerification = async (doctorId) => {
 
 exports.getDoctorById = async (doctorId) => {
     try {
-        const doctor = await Doctor.findById(doctorId).populate('department', 'name slug description icon color');
+        const doctor = await Doctor.findById(doctorId).populate('departments', 'name slug description icon color');
         return doctor;
     } catch (error) {
         throw error;
@@ -715,7 +800,7 @@ exports.getAllDoctorsForAdmin = async (options) => {
         // Execute query
         const [doctors, totalCount] = await Promise.all([
             Doctor.find(query)
-                .populate('department', 'name slug description icon color')
+                .populate('departments', 'name slug description icon color')
                 .select('-password -refreshToken')
                 .sort(sort)
                 .skip(skip)
@@ -814,6 +899,115 @@ exports.getDoctorStats = async () => {
             rejected: rejectedDoctors,
             active: activeDoctors
         };
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Get department pricing for a specific department
+exports.getDepartmentPricing = async (doctorId, departmentId) => {
+    try {
+        const doctor = await Doctor.findById(doctorId).populate('approvedDepartmentPricing.department pendingDepartmentPricing.department');
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        const approvedPricing = doctor.approvedDepartmentPricing.find(p => 
+            p.department._id.toString() === departmentId.toString()
+        );
+
+        const pendingPricing = doctor.pendingDepartmentPricing.find(p => 
+            p.department._id.toString() === departmentId.toString()
+        );
+
+        return {
+            approved: approvedPricing,
+            pending: pendingPricing
+        };
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Enable/disable pricing editing for doctor (admin only)
+exports.togglePricingEdit = async (doctorId, canEdit, adminId) => {
+    try {
+        const doctor = await Doctor.findByIdAndUpdate(
+            doctorId,
+            { 
+                canEditPricing: canEdit,
+                updatedBy: adminId
+            },
+            { new: true, runValidators: true }
+        );
+
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        return doctor;
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Approve pending pricing updates (admin only)
+exports.approvePendingPricing = async (doctorId, adminId) => {
+    try {
+        const doctor = await Doctor.findById(doctorId);
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        if (!doctor.pendingDepartmentPricing || doctor.pendingDepartmentPricing.length === 0) {
+            throw new Error('No pending pricing updates found');
+        }
+
+        // Move pending pricing to approved pricing
+        doctor.pendingDepartmentPricing.forEach(pendingPricing => {
+            // Remove existing approved pricing for this department
+            doctor.approvedDepartmentPricing = doctor.approvedDepartmentPricing.filter(p => 
+                p.department.toString() !== pendingPricing.department.toString()
+            );
+            
+            // Add new approved pricing
+            doctor.approvedDepartmentPricing.push({
+                department: pendingPricing.department,
+                fee: pendingPricing.fee,
+                approvedAt: new Date(),
+                approvedBy: adminId
+            });
+        });
+        
+        // Clear pending pricing
+        doctor.pendingDepartmentPricing = [];
+
+        await doctor.save();
+
+        return doctor;
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Reject pending pricing updates (admin only)
+exports.rejectPendingPricing = async (doctorId, adminId, reason) => {
+    try {
+        const doctor = await Doctor.findById(doctorId);
+        if (!doctor) {
+            throw new Error('Doctor not found');
+        }
+
+        if (!doctor.pendingDepartmentPricing || doctor.pendingDepartmentPricing.length === 0) {
+            throw new Error('No pending pricing updates found');
+        }
+
+        // Clear pending pricing
+        doctor.pendingDepartmentPricing = [];
+
+        await doctor.save();
+
+        return doctor;
     } catch (error) {
         throw error;
     }

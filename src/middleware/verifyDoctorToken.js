@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../modules/user/user.model');
 const sendResponse = require('../utils/sendResponse');
 const Doctor = require('../modules/doctor/doctor.model');
+const doctorService = require('../modules/doctor/doctor.services');
 
 exports.verifyDoctorToken = async (req, res, next) => {
     try {
@@ -15,9 +16,9 @@ exports.verifyDoctorToken = async (req, res, next) => {
             });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const decoded = doctorService.verifyAccessToken(token);
         // Find full user data from database
-        const doctor = await Doctor.findById(decoded.doctorId).populate('department', 'name slug description icon color');
+        const doctor = await Doctor.findById(decoded.doctorId).populate('departments', 'name slug description icon color');
        
         if (!doctor) {
             return sendResponse({

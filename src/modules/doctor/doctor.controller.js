@@ -176,7 +176,7 @@ exports.registerDoctor = async (req, res) => {
         const doctorData = req.body;
         
         // Validate required fields (only essential ones)
-        const requiredFields = ['firstName', 'lastName', 'email', 'phone', 'department', 'currentHospital', 'consultationFee'];
+        const requiredFields = ['firstName', 'lastName', 'email', 'phone', 'departments', 'currentHospital', 'consultationFee'];
         const missingFields = requiredFields.filter(field => !doctorData[field]);
         
         if (missingFields.length > 0) {
@@ -191,15 +191,39 @@ exports.registerDoctor = async (req, res) => {
         // Normalize phone
         doctorData.phone = normalizePhone(doctorData.phone);
         
+        // Validate departments array
+        if (!Array.isArray(doctorData.departments) || doctorData.departments.length === 0) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'At least one department is required'
+            });
+        }
+        
+        if (doctorData.departments.length > 3) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Maximum 3 departments allowed'
+            });
+        }
+        
         const doctor = await doctorService.createDoctor(doctorData);
+        
+        // Generate tokens for auto-login
+        const tokens = await doctorService.generateTokens(doctor._id);
         
         sendResponse({
             res,
             statusCode: 201,
             success: true,
-            message: 'Doctor registration successful. Please login to continue.',
+            message: 'Doctor registration successful. You are now logged in.',
             data: {
-                doctor: doctor.getPublicProfile()
+                doctor: doctor.getPublicProfile(),
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken
             }
         });
     } catch (error) {
@@ -332,6 +356,28 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         const updateData = req.body;
+        
+        // Validate departments if provided
+        if (updateData.departments) {
+            if (!Array.isArray(updateData.departments) || updateData.departments.length === 0) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: 'At least one department is required'
+                });
+            }
+            
+            if (updateData.departments.length > 3) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: 'Maximum 3 departments allowed'
+                });
+            }
+        }
+        
         const doctor = await doctorService.updateDoctorProfile(req.doctor._id, updateData);
 
         const isReadyForVerification = await doctorService.checkOrSetIsReadyForVerification(req.doctor._id);

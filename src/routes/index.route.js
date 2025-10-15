@@ -9,6 +9,9 @@ const adminDoctorRoutes = require('../modules/admin/doctor/admin.doctor.route');
 const adminUserRoutes = require('../modules/admin/user/admin.user.route');
 const adminDepartmentRoutes = require('../modules/admin/department/admin.department.route');
 const adminAuthRoutes = require('../modules/admin/auth/admin.route');
+const timeSlotRoutes = require('../modules/timeslot/timeslot.route');
+const appointmentRoutes = require('../modules/appointment/appointment.route');
+const prescriptionRoutes = require('../modules/prescription/prescription.route');
 
 router.use('/doctor', doctorRoutes);
 router.use('/user', userRoutes);
@@ -18,6 +21,9 @@ router.use('/admin/doctor', adminDoctorRoutes);
 router.use('/admin/user', adminUserRoutes);
 router.use('/admin/department', adminDepartmentRoutes);
 router.use('/admin/auth', adminAuthRoutes);
+router.use('/timeslot', timeSlotRoutes);
+router.use('/appointment', appointmentRoutes);
+router.use('/prescription', prescriptionRoutes);
 
 // Health check route
 router.get('/health', (req, res) => {

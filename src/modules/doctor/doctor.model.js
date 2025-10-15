@@ -48,11 +48,62 @@ const doctorSchema = new mongoose.Schema({
     },
     
     // Professional Information
-    department: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Department',
-        required: [true, 'Department is required']
+    departments: {
+        type: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Department',
+            required: true
+        }],
+        validate: {
+            validator: function(departments) {
+                return departments && departments.length >= 1 && departments.length <= 3;
+            },
+            message: 'Doctor must have at least 1 and at most 3 departments'
+        },
+        required: [true, 'At least one department is required']
     },
+    // Currently active/approved pricing for appointments
+    approvedDepartmentPricing: [{
+        department: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Department',
+            required: true
+        },
+        fee: {
+            type: Number,
+            required: true,
+            min: [0, 'Department fee cannot be negative']
+        },
+        approvedAt: {
+            type: Date,
+            default: Date.now
+        },
+        approvedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        }
+    }],
+    // Pending pricing updates waiting for admin approval
+    pendingDepartmentPricing: [{
+        department: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Department',
+            required: true
+        },
+        fee: {
+            type: Number,
+            required: true,
+            min: [0, 'Department fee cannot be negative']
+        },
+        submittedAt: {
+            type: Date,
+            default: Date.now
+        },
+        previousFee: {
+            type: Number,
+            required: true
+        }
+    }],
     experience: {
         type: Number,
         required: false,
@@ -176,6 +227,10 @@ const doctorSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    canEditPricing: {
+        type: Boolean,
+        default: true
+    },
     verificationNotes: {
         type: String,
         trim: true,
@@ -223,7 +278,7 @@ doctorSchema.index({ email: 1 });
 doctorSchema.index({ phone: 1 });
 doctorSchema.index({ bmdcNumber: 1 }, { sparse: true }); // Sparse index allows multiple null values
 doctorSchema.index({ status: 1 });
-doctorSchema.index({ department: 1 });
+doctorSchema.index({ departments: 1 });
 doctorSchema.index({ isActive: 1, isAvailable: 1 });
 
 // Virtual for full name
@@ -246,7 +301,9 @@ doctorSchema.methods.getPublicProfile = function() {
         firstName: this.firstName,
         lastName: this.lastName,
         name: this.fullName,
-        department: this.department,
+        departments: this.departments,
+        approvedDepartmentPricing: this.approvedDepartmentPricing,
+        pendingDepartmentPricing: this.pendingDepartmentPricing,
         experience: this.experience,
         qualification: this.qualification,
         bmdcNumber: this.bmdcNumber,
@@ -276,6 +333,27 @@ doctorSchema.methods.getVerifiedDocuments = function() {
 // Method to get pending documents
 doctorSchema.methods.getPendingDocuments = function() {
     return this.documents.filter(doc => !doc.verified && !doc.rejected);
+};
+
+// Method to get approved department pricing for a specific department
+doctorSchema.methods.getApprovedDepartmentPricing = function(departmentId) {
+    if (departmentId) {
+        return this.approvedDepartmentPricing.find(p => p.department.toString() === departmentId.toString());
+    }
+    return this.approvedDepartmentPricing;
+};
+
+// Method to get pending department pricing for a specific department
+doctorSchema.methods.getPendingDepartmentPricing = function(departmentId) {
+    if (departmentId) {
+        return this.pendingDepartmentPricing.find(p => p.department.toString() === departmentId.toString());
+    }
+    return this.pendingDepartmentPricing;
+};
+
+// Method to check if doctor can edit pricing
+doctorSchema.methods.canEditPricingNow = function() {
+    return this.canEditPricing && this.isCurrentlyHaveEditProfile;
 };
 
 // Pre-save middleware
