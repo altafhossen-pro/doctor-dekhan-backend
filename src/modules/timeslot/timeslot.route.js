@@ -6,6 +6,9 @@ const { verifyDoctorToken } = require('../../middleware/verifyDoctorToken');
 // Public route for getting available slots (for appointment booking)
 router.get('/public/available/:doctorId', timeSlotController.getPublicAvailableSlots);
 
+// Public route for getting available slots for a date range
+router.get('/public/available-range/:doctorId', timeSlotController.getPublicAvailableSlotsRange);
+
 // All other routes require doctor authentication
 router.use(verifyDoctorToken);
 

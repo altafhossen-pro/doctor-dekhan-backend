@@ -199,7 +199,6 @@ exports.createDoctor = async (doctorData) => {
             doctorUID: doctorUID,
             departments: doctorData.departments,
             currentHospital: doctorData.currentHospital,
-            consultationFee: doctorData.consultationFee,
             // Optional fields - only include if provided and not empty
             ...(doctorData.experience && doctorData.experience !== '' && { experience: doctorData.experience }),
             ...(doctorData.qualification && doctorData.qualification.trim() !== '' && { qualification: doctorData.qualification }),
@@ -228,7 +227,9 @@ exports.findDoctorByPhone = async (phone) => {
 // Find doctor by slug
 exports.findDoctorBySlug = async (slug) => {
     try {
-        return await Doctor.findOne({ slug, isActive: true });
+        return await Doctor.findOne({ slug, isActive: true, status: 'approved' })
+            .populate('departments', 'name slug description icon color')
+            .select('-password -refreshToken -isVerificationStatusSended -isCurrentlyHaveEditProfile -pendingDepartmentPricing');
     } catch (error) {
         throw error;
     }
@@ -808,6 +809,266 @@ exports.getAllDoctorsForAdmin = async (options) => {
                 .lean(),
             Doctor.countDocuments(query)
         ]);
+
+        // Calculate pagination info
+        const totalPages = Math.ceil(totalCount / limit);
+        const hasNextPage = page < totalPages;
+        const hasPrevPage = page > 1;
+
+        return {
+            doctors,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages,
+                totalCount,
+                limit: parseInt(limit),
+                hasNextPage,
+                hasPrevPage
+            }
+        };
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Get doctors with pagination and filters (public)
+exports.getDoctorsWithPagination = async (options) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            search = '',
+            department = '',
+            experience = '',
+            rating = '',
+            priceRange = '',
+            availability = '',
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
+        } = options;
+
+        // Build query - only approved and active doctors
+        let query = {
+            status: 'approved',
+            isActive: true
+        };
+
+        // Department filter - now always required
+        if (department) {
+            // Find department by slug (since frontend sends slug)
+            const Department = require('../department/department.model');
+            const dept = await Department.findOne({
+                slug: department,
+                isActive: true
+            });
+            
+            if (dept) {
+                // Find doctors who have this department
+                query.departments = dept._id;
+            } else {
+                // If department not found, return empty result
+                return {
+                    success: true,
+                    message: 'Department not found',
+                    data: {
+                        doctors: [],
+                        pagination: {
+                            currentPage: page,
+                            totalPages: 0,
+                            totalCount: 0,
+                            limit: limit,
+                            hasNextPage: false,
+                            hasPrevPage: false
+                        }
+                    }
+                };
+            }
+        } else {
+            // If no department specified, return empty result (department is now mandatory)
+            return {
+                success: true,
+                message: 'Department selection is required',
+                data: {
+                    doctors: [],
+                    pagination: {
+                        currentPage: page,
+                        totalPages: 0,
+                        totalCount: 0,
+                        limit: limit,
+                        hasNextPage: false,
+                        hasPrevPage: false
+                    }
+                }
+            };
+        }
+
+        // Search filter - basic fields only (departments will be handled in aggregation)
+        if (search) {
+            query.$or = [
+                { firstName: { $regex: search, $options: 'i' } },
+                { lastName: { $regex: search, $options: 'i' } },
+                { qualification: { $regex: search, $options: 'i' } },
+                { bmdcNumber: { $regex: search, $options: 'i' } },
+                { doctorUID: { $regex: search, $options: 'i' } },
+                { currentHospital: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Experience filter
+        if (experience) {
+            if (experience === '0-2') {
+                query.experience = { $gte: 0, $lte: 2 };
+            } else if (experience === '3-5') {
+                query.experience = { $gte: 3, $lte: 5 };
+            } else if (experience === '6-9') {
+                query.experience = { $gte: 6, $lte: 9 };
+            } else if (experience === '10+') {
+                query.experience = { $gte: 10 };
+            }
+        }
+
+        // Price range filter based on approvedDepartmentPricing
+        if (priceRange) {
+            // We'll handle this in the aggregation pipeline after lookup
+        }
+
+        // Availability filter
+        if (availability === 'available') {
+            query.isAvailable = true;
+        }
+
+        // Calculate pagination
+        const skip = (page - 1) * limit;
+
+        // Build sort object
+        const sort = {};
+        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+        // Execute query with time slot check using aggregation
+        const TimeSlot = require('../timeslot/timeslot.model');
+        
+        // Get doctors with time slots using aggregation
+        const doctorsWithTimeSlots = await Doctor.aggregate([
+            {
+                $match: query
+            },
+            {
+                $lookup: {
+                    from: 'timeslots',
+                    localField: '_id',
+                    foreignField: 'doctor',
+                    as: 'timeSlots',
+                    pipeline: [
+                        {
+                            $match: {
+                                isActive: true // Only active time slots
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $match: {
+                    'timeSlots.0': { $exists: true } // Only doctors with at least one active time slot
+                }
+            },
+            {
+                $lookup: {
+                    from: 'departments',
+                    localField: 'departments',
+                    foreignField: '_id',
+                    as: 'departments'
+                }
+            },
+            // Add search filter for departments after lookup
+            ...(search ? [{
+                $match: {
+                    $or: [
+                        { firstName: { $regex: search, $options: 'i' } },
+                        { lastName: { $regex: search, $options: 'i' } },
+                        { qualification: { $regex: search, $options: 'i' } },
+                        { bmdcNumber: { $regex: search, $options: 'i' } },
+                        { doctorUID: { $regex: search, $options: 'i' } },
+                        { currentHospital: { $regex: search, $options: 'i' } },
+                        { 'departments.name': { $regex: search, $options: 'i' } }
+                    ]
+                }
+            }] : []),
+            // Add price range filter based on approvedDepartmentPricing
+            ...(priceRange ? [{
+                $match: {
+                    $expr: {
+                        $anyElementTrue: {
+                            $map: {
+                                input: "$approvedDepartmentPricing",
+                                as: "pricing",
+                                in: (() => {
+                                    if (priceRange === '0-499') {
+                                        return { $and: [{ $gte: ["$$pricing.fee", 0] }, { $lte: ["$$pricing.fee", 499] }] };
+                                    } else if (priceRange === '500-999') {
+                                        return { $and: [{ $gte: ["$$pricing.fee", 500] }, { $lte: ["$$pricing.fee", 999] }] };
+                                    } else if (priceRange === '1000-1999') {
+                                        return { $and: [{ $gte: ["$$pricing.fee", 1000] }, { $lte: ["$$pricing.fee", 1999] }] };
+                                    } else if (priceRange === '2000+') {
+                                        return { $gte: ["$$pricing.fee", 2000] };
+                                    }
+                                    return true;
+                                })()
+                            }
+                        }
+                    }
+                }
+            }] : []),
+            {
+                $project: {
+                    password: 0,
+                    refreshToken: 0,
+                    timeSlots: 0 // Remove timeSlots from final result
+                }
+            },
+            {
+                $sort: sort
+            },
+            {
+                $skip: skip
+            },
+            {
+                $limit: parseInt(limit)
+            }
+        ]);
+
+        // Get total count of doctors with active time slots
+        const totalCountResult = await Doctor.aggregate([
+            {
+                $match: query
+            },
+            {
+                $lookup: {
+                    from: 'timeslots',
+                    localField: '_id',
+                    foreignField: 'doctor',
+                    as: 'timeSlots',
+                    pipeline: [
+                        {
+                            $match: {
+                                isActive: true // Only active time slots
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $match: {
+                    'timeSlots.0': { $exists: true } // Only doctors with at least one active time slot
+                }
+            },
+            {
+                $count: 'total'
+            }
+        ]);
+
+        const doctors = doctorsWithTimeSlots;
+        const totalCount = totalCountResult.length > 0 ? totalCountResult[0].total : 0;
 
         // Calculate pagination info
         const totalPages = Math.ceil(totalCount / limit);

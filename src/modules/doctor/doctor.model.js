@@ -132,10 +132,11 @@ const doctorSchema = new mongoose.Schema({
         trim: true,
         maxlength: [200, 'Hospital name cannot exceed 200 characters']
     },
-    consultationFee: {
-        type: Number,
-        required: [true, 'Consultation fee is required'],
-        min: [0, 'Consultation fee cannot be negative']
+    
+    // Profile Picture
+    profilePicture: {
+        type: String,
+        default: null
     },
     
     // Availability
@@ -143,20 +144,6 @@ const doctorSchema = new mongoose.Schema({
         type: String,
         enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
         required: false
-    }],
-    availableTimeSlots: [{
-        day: {
-            type: String,
-            enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-        },
-        startTime: {
-            type: String,
-            match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter time in HH:MM format']
-        },
-        endTime: {
-            type: String,
-            match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter time in HH:MM format']
-        }
     }],
     
     // Documents - Dynamic system for multiple documents
@@ -293,13 +280,11 @@ doctorSchema.methods.isVerified = function() {
 
 // Method to get public profile
 doctorSchema.methods.getPublicProfile = function() {
-    // Get profile picture from documents
-    const profilePicture = this.documents.find(doc => doc.type === 'profile_picture');
-    
     return {
         id: this._id,
         firstName: this.firstName,
         lastName: this.lastName,
+        slug: this.slug,
         name: this.fullName,
         departments: this.departments,
         approvedDepartmentPricing: this.approvedDepartmentPricing,
@@ -308,12 +293,10 @@ doctorSchema.methods.getPublicProfile = function() {
         qualification: this.qualification,
         bmdcNumber: this.bmdcNumber,
         currentHospital: this.currentHospital,
-        consultationFee: this.consultationFee,
         availableDays: this.availableDays,
-        availableTimeSlots: this.availableTimeSlots,
         rating: this.rating,
         isAvailable: this.isAvailable,
-        profilePicture: profilePicture?.url,
+        profilePicture: this.profilePicture,
         status: this.status,
         isCurrentlyHaveEditProfile: this.isCurrentlyHaveEditProfile,
         isVerificationStatusSended: this.isVerificationStatusSended

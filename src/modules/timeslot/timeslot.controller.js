@@ -35,6 +35,40 @@ exports.getPublicAvailableSlots = async (req, res) => {
     }
 };
 
+// Public endpoint for getting available slots for a date range
+exports.getPublicAvailableSlotsRange = async (req, res) => {
+    try {
+        const { doctorId } = req.params;
+        const { startDate, endDate } = req.query;
+        
+        if (!doctorId || !startDate || !endDate) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Doctor ID, startDate, and endDate are required'
+            });
+        }
+        
+        const availableSlots = await timeSlotService.getAvailableSlotsRange(doctorId, startDate, endDate);
+        
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Available slots retrieved successfully',
+            data: { availableSlots }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
 // Create or update time slot
 exports.createOrUpdateTimeSlot = async (req, res) => {
     try {

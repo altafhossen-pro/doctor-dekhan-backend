@@ -176,7 +176,7 @@ exports.registerDoctor = async (req, res) => {
         const doctorData = req.body;
         
         // Validate required fields (only essential ones)
-        const requiredFields = ['firstName', 'lastName', 'email', 'phone', 'departments', 'currentHospital', 'consultationFee'];
+        const requiredFields = ['firstName', 'lastName', 'email', 'phone', 'departments', 'currentHospital'];
         const missingFields = requiredFields.filter(field => !doctorData[field]);
         
         if (missingFields.length > 0) {
@@ -527,6 +527,71 @@ exports.uploadFile = async (req, res) => {
     }
 };
 
+// Upload profile picture endpoint
+exports.uploadProfilePicture = async (req, res) => {
+    try {
+        if (!req.file) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'No profile picture uploaded'
+            });
+        }
+
+        // Validate file type for profile picture
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(req.file.mimetype)) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Only JPG, PNG, and WebP images are allowed for profile picture'
+            });
+        }
+
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (req.file.size > maxSize) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Profile picture size must be less than 5MB'
+            });
+        }
+
+        const fileUrl = generateFileUrl(req.file.filename, false);
+        
+        // Update doctor's profile picture URL
+        const doctor = await doctorService.updateDoctorProfile(req.doctor._id, {
+            profilePicture: fileUrl
+        });
+        
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Profile picture uploaded and saved successfully',
+            data: {
+                filename: req.file.filename,
+                originalName: req.file.originalname,
+                url: fileUrl,
+                size: req.file.size,
+                mimeType: req.file.mimetype,
+                // doctor: doctor.getPublicProfile()
+            }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
 // Submit profile for admin approval
 exports.submitForApproval = async (req, res) => {
     try {
@@ -616,13 +681,29 @@ exports.getDoctorBySlug = async (req, res) => {
             });
         }
         
+        // Format doctor data with proper department pricing
+        const doctorData = doctor.getPublicProfile();
+        
+        // Map approvedDepartmentPricing with department names
+        if (doctorData.approvedDepartmentPricing && doctorData.approvedDepartmentPricing.length > 0) {
+            doctorData.approvedDepartmentPricing = doctorData.approvedDepartmentPricing.map(pricing => ({
+                department: {
+                    id: pricing.department,
+                    name: doctor.departments.find(dept => dept._id.toString() === pricing.department.toString())?.name || 'Unknown Department'
+                },
+                fee: pricing.fee,
+                approvedAt: pricing.approvedAt,
+                approvedBy: pricing.approvedBy
+            }));
+        }
+        
         sendResponse({
             res,
             statusCode: 200,
             success: true,
             message: 'Doctor retrieved successfully',
             data: {
-                doctor: doctor.getPublicProfile()
+                doctor: doctorData
             }
         });
     } catch (error) {
@@ -657,6 +738,91 @@ exports.getDoctorByUID = async (req, res) => {
             message: 'Doctor retrieved successfully',
             data: {
                 doctor: doctor.getPublicProfile()
+            }
+        });
+    } catch (error) {
+        sendResponse({
+            res,
+            statusCode: 400,
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// Get doctors with pagination and filters (public)
+exports.getDoctorsWithPagination = async (req, res) => {
+    try {
+        const { 
+            page = 1, 
+            limit = 10, 
+            search = '',
+            department = '',
+            experience = '',
+            rating = '',
+            priceRange = '',
+            availability = '',
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
+        } = req.query;
+        
+        const options = {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            search: search.trim(),
+            department: department.trim(),
+            experience: experience.trim(),
+            rating: rating.trim(),
+            priceRange: priceRange.trim(),
+            availability: availability.trim(),
+            sortBy,
+            sortOrder
+        };
+        
+        const result = await doctorService.getDoctorsWithPagination(options);
+        
+        sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: 'Doctors retrieved successfully',
+            data: {
+                doctors: result.doctors.map(doctor => {
+                    // Since aggregation returns plain objects, we need to format manually
+                    
+                    return {
+                        id: doctor._id,
+                        firstName: doctor.firstName,
+                        lastName: doctor.lastName,
+                        slug: doctor.slug,
+                        name: `${doctor.firstName} ${doctor.lastName}`,
+                        departments: doctor.departments || [],
+                        approvedDepartmentPricing: doctor.approvedDepartmentPricing && doctor.approvedDepartmentPricing.length > 0 ? doctor.approvedDepartmentPricing.map(pricing => ({
+                            department: {
+                                id: pricing.department,
+                                name: (doctor.departments && doctor.departments.length > 0) 
+                                    ? doctor.departments.find(dept => dept._id.toString() === pricing.department.toString())?.name || 'Unknown Department'
+                                    : 'Unknown Department'
+                            },
+                            fee: pricing.fee,
+                            approvedAt: pricing.approvedAt,
+                            approvedBy: pricing.approvedBy
+                        })) : [],
+                        profilePicture: doctor.profilePicture,
+                        pendingDepartmentPricing: doctor.pendingDepartmentPricing,
+                        experience: doctor.experience,
+                        qualification: doctor.qualification,
+                        bmdcNumber: doctor.bmdcNumber,
+                        currentHospital: doctor.currentHospital,
+                        availableDays: doctor.availableDays,
+                        rating: doctor.rating,
+                        isAvailable: doctor.isAvailable,
+                        status: doctor.status,
+                        isCurrentlyHaveEditProfile: doctor.isCurrentlyHaveEditProfile,
+                        isVerificationStatusSended: doctor.isVerificationStatusSended
+                    };
+                }),
+                pagination: result.pagination
             }
         });
     } catch (error) {

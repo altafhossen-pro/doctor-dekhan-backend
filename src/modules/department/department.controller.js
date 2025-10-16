@@ -4,7 +4,14 @@ const sendResponse = require('../../utils/sendResponse');
 // Get all active departments (public)
 exports.getAllDepartments = async (req, res) => {
     try {
-        const departments = await departmentService.getAllActiveDepartments();
+        const { includeDoctorCount = false } = req.query;
+        
+        let departments;
+        if (includeDoctorCount === 'true') {
+            departments = await departmentService.getAllActiveDepartmentsWithDoctorCounts();
+        } else {
+            departments = await departmentService.getAllActiveDepartments();
+        }
         
         sendResponse({
             res,
@@ -12,7 +19,29 @@ exports.getAllDepartments = async (req, res) => {
             success: true,
             message: 'Departments retrieved successfully',
             data: {
-                departments: departments.map(dept => dept.publicInfo),
+                departments: departments.map(dept => {
+                    // If dept has publicInfo (from regular getAllActiveDepartments)
+                    if (dept.publicInfo) {
+                        return {
+                            ...dept.publicInfo,
+                            ...(dept.doctorCount !== undefined && { doctorCount: dept.doctorCount })
+                        };
+                    }
+                    // If dept is from getAllActiveDepartmentsWithDoctorCounts (already has virtuals)
+                    else {
+                        return {
+                            id: dept.id,
+                            name: dept.name,
+                            slug: dept.slug,
+                            description: dept.description,
+                            icon: dept.icon,
+                            image: dept.image,
+                            color: dept.color,
+                            isActive: dept.isActive,
+                            ...(dept.doctorCount !== undefined && { doctorCount: dept.doctorCount })
+                        };
+                    }
+                }),
                 count: departments.length
             }
         });

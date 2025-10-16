@@ -1,4 +1,5 @@
 const TimeSlot = require('./timeslot.model');
+const Appointment = require('../appointment/appointment.model');
 
 // Create or update time slot for a doctor
 exports.createOrUpdateTimeSlot = async (doctorId, timeSlotData) => {
@@ -115,6 +116,90 @@ exports.getAvailableSlots = async (doctorId, date, dayOfWeek) => {
         }));
     } catch (error) {
         throw new Error(`Failed to get available slots: ${error.message}`);
+    }
+};
+
+// Get available slots for a date range
+exports.getAvailableSlotsRange = async (doctorId, startDate, endDate) => {
+    try {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const allAvailableSlots = [];
+        
+        // Get all time slots for this doctor
+        const timeSlots = await TimeSlot.find({
+            doctor: doctorId,
+            isActive: true
+        });
+        
+        if (!timeSlots || timeSlots.length === 0) {
+            return [];
+        }
+        
+        // Day mapping: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        
+        // Iterate through each day in the range
+        for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
+            const dayOfWeekNumber = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+            const dayOfWeekName = dayNames[dayOfWeekNumber]; // Convert to lowercase name
+            const dateStr = currentDate.toISOString().split('T')[0];
+            
+            // Find time slot for this day of week
+            const timeSlot = timeSlots.find(slot => slot.dayOfWeek === dayOfWeekName);
+            
+            if (timeSlot) {
+                // Generate slots for this day
+                const daySlots = timeSlot.generateSlots();
+                
+                // Get existing appointments for this date
+                const startOfDay = new Date(dateStr);
+                startOfDay.setHours(0, 0, 0, 0);
+                
+                const endOfDay = new Date(dateStr);
+                endOfDay.setHours(23, 59, 59, 999);
+                
+                const existingAppointments = await Appointment.find({
+                    doctor: doctorId,
+                    appointmentDate: {
+                        $gte: startOfDay,
+                        $lte: endOfDay
+                    },
+                    status: { $nin: ['cancelled', 'no-show'] }
+                });
+                
+                // Add date to each slot with availability check
+                daySlots.forEach((slot, index) => {
+                    // Check if this slot is already booked
+                    const isBooked = existingAppointments.some(appointment => {
+                        return appointment.startTime === slot.startTime;
+                    });
+                    
+                    // Calculate available appointments for this slot
+                    const bookedCount = existingAppointments.filter(appointment => 
+                        appointment.startTime === slot.startTime
+                    ).length;
+                    
+                    const availableCount = timeSlot.maxAppointments - bookedCount;
+                    const isAvailable = availableCount > 0;
+                    
+                    allAvailableSlots.push({
+                        ...slot,
+                        date: dateStr,
+                        time: slot.startTime, // Use startTime as the display time
+                        slotId: `${timeSlot._id}_${dateStr}_${index}`,
+                        isAvailable: isAvailable,
+                        maxAppointments: timeSlot.maxAppointments,
+                        availableCount: availableCount,
+                        bookedCount: bookedCount
+                    });
+                });
+            }
+        }
+        
+        return allAvailableSlots;
+    } catch (error) {
+        throw new Error(`Failed to get available slots range: ${error.message}`);
     }
 };
 

@@ -1,9 +1,37 @@
 const Department = require('./department.model');
+const Doctor = require('../doctor/doctor.model');
 
 // Get all active departments
 exports.getAllActiveDepartments = async () => {
     try {
         return await Department.findActive();
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Get all active departments with doctor counts
+exports.getAllActiveDepartmentsWithDoctorCounts = async () => {
+    try {
+        const departments = await Department.findActive();
+        
+        // Get doctor counts for each department
+        const departmentsWithCounts = await Promise.all(
+            departments.map(async (department) => {
+                const doctorCount = await Doctor.countDocuments({
+                    departments: department._id,
+                    status: 'approved',
+                    isActive: true
+                });
+                
+                return {
+                    ...department.toObject({ virtuals: true }),
+                    doctorCount
+                };
+            })
+        );
+        
+        return departmentsWithCounts;
     } catch (error) {
         throw error;
     }
